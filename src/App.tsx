@@ -1,0 +1,1642 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
+import { StockItem, Transaction, Invoice, Quote, Receipt, Expense, Contact, Language, Currency, ToastMessage, CompanySettings, DocumentItem } from './types';
+import SidebarLeft from './components/SidebarLeft';
+import SidebarRight from './components/SidebarRight';
+import Header from './components/Header';
+import DashboardView from './components/DashboardView';
+import StockView from './components/StockView';
+import InvoicesView from './components/InvoicesView';
+import NewsView from './components/NewsView';
+import QuotesView from './components/QuotesView';
+import ReceiptsView from './components/ReceiptsView';
+import ExpensesView from './components/ExpensesView';
+import ContactsView from './components/ContactsView';
+import AuthView from './components/AuthView';
+import SettingsView from './components/SettingsView';
+import { supabase } from './lib/supabase';
+import * as db from './lib/db';
+import { generateInvoicePDF, generateFinancialReportPDF } from './lib/pdf';
+
+import { X, Check, Info, Mail, Phone, Database, Plus, Trash2 } from 'lucide-react';
+import { formatValue } from './data';
+
+export default function App() {
+
+  // ─── Auth & Loading ──────────────────────────────────────────────────────
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // ─── Preferences (localStorage only) ────────────────────────────────────
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = localStorage.getItem('invstock_lang');
+    return (saved === 'en' || saved === 'pt') ? (saved as Language) : 'pt';
+  });
+
+  // Always Metical (MZN/MT)
+  const currency: Currency = 'MZN';
+
+  // Disabled dark mode (defaults to clean light theme)
+  const darkMode = false;
+
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    return localStorage.getItem('invstock_tab') || 'dashboard';
+  });
+
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // ─── ERP Data States (start empty – loaded from Supabase) ────────────────
+  const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Modal state
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+
+  // Company settings & user info
+  const [companySettings, setCompanySettings] = useState<CompanySettings>({
+    companyName: '', nuit: '', address: '', city: '', phone: '', email: '',
+    bankAccounts: [], mobileContacts: [], setupComplete: false,
+  });
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+
+  // Form state – Invoice
+  const [formInvoiceClient, setFormInvoiceClient] = useState('');
+  const [formInvoiceClientNuit, setFormInvoiceClientNuit] = useState('');
+  const [formInvoiceStatus, setFormInvoiceStatus] = useState<Invoice['status']>('Pending');
+  const [formInvoiceDescription, setFormInvoiceDescription] = useState('');
+  const [formInvoiceDueDate, setFormInvoiceDueDate] = useState('');
+  const [formInvoiceItems, setFormInvoiceItems] = useState<DocumentItem[]>([
+    { description: '', quantity: 1, unitPrice: 0 },
+  ]);
+
+  // Form state – Stock
+  const [formStockName, setFormStockName] = useState('');
+  const [formStockSku, setFormStockSku] = useState('');
+  const [formStockCategory, setFormStockCategory] = useState('Hardware');
+  const [formStockWarehouse, setFormStockWarehouse] = useState('NYC');
+  const [formStockPrice, setFormStockPrice] = useState('');
+  const [formStockLevel, setFormStockLevel] = useState('');
+  const [formStockMax, setFormStockMax] = useState('');
+
+  // Form state – Quote
+  const [formQuoteClient, setFormQuoteClient] = useState('');
+  const [formQuoteClientNuit, setFormQuoteClientNuit] = useState('');
+  const [formQuoteDescription, setFormQuoteDescription] = useState('');
+  const [formQuoteValidity, setFormQuoteValidity] = useState('15');
+  const [formQuoteItems, setFormQuoteItems] = useState<DocumentItem[]>([
+    { description: '', quantity: 1, unitPrice: 0 },
+  ]);
+
+  // Form state – Expense
+  const [formExpenseMerchant, setFormExpenseMerchant] = useState('');
+  const [formExpenseCategory, setFormExpenseCategory] = useState('Logistics');
+  const [formExpenseAmount, setFormExpenseAmount] = useState('');
+  const [formExpenseDate, setFormExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formExpenseNotes, setFormExpenseNotes] = useState('');
+
+  // Form state – Contact
+  const [formContactName, setFormContactName] = useState('');
+  const [formContactEmail, setFormContactEmail] = useState('');
+  const [formContactPhone, setFormContactPhone] = useState('');
+  const [formContactCompany, setFormContactCompany] = useState('');
+  const [formContactRole, setFormContactRole] = useState('Lead Specialist');
+
+  const [reportProgress, setReportProgress] = useState(0);
+
+  // Ref to prevent double-load on strict mode
+  const loadedRef = useRef<string | null>(null);
+
+  // ─── Navigation guard ─────────────────────────────────────────────────────
+  const navigateTo = (tab: string) => {
+    if (!companySettings.setupComplete && tab !== 'settings') return;
+    setActiveTab(tab);
+  };
+
+  // ─── Derive transactions from invoices ───────────────────────────────────
+  function invoicesToTransactions(invs: Invoice[]): Transaction[] {
+    return invs.map(inv => ({
+      id: inv.id + '-tx',
+      transactionId: inv.invoiceNumber,
+      client: inv.client,
+      initials: inv.initials,
+      amount: inv.amount,
+      status: inv.status,
+      statusPt: inv.statusPt,
+      date: inv.date,
+      datePt: inv.datePt,
+      avatarBg: 'bg-emerald-100 text-emerald-800',
+      avatarText: inv.initials,
+    }));
+  }
+
+  // ─── Load all user data from Supabase ────────────────────────────────────
+  async function loadUserData(userId: string) {
+    if (loadedRef.current === userId) return;
+    loadedRef.current = userId;
+
+    const [invs, qts, rcs, exps, stock, ctcs, settingsData] = await Promise.all([
+      db.fetchInvoices(userId),
+      db.fetchQuotes(userId),
+      db.fetchReceipts(userId),
+      db.fetchExpenses(userId),
+      db.fetchStockItems(userId),
+      db.fetchContacts(userId),
+      db.fetchCompanySettings(userId),
+    ]);
+
+    setInvoices(invs);
+    setTransactions(invoicesToTransactions(invs));
+    setQuotes(qts);
+    setReceipts(rcs);
+    setExpenses(exps);
+    setStockItems(stock);
+    setContacts(ctcs);
+
+    if (settingsData) {
+      setCompanySettings(settingsData);
+      if (!settingsData.setupComplete) {
+        setActiveTab('settings');
+      }
+    } else {
+      // No settings yet → force setup
+      setActiveTab('settings');
+    }
+
+    // Get user info
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      setUserEmail(user.email ?? '');
+      setUserName((user.user_metadata?.name as string) ?? '');
+    }
+  }
+
+  function clearUserData() {
+    loadedRef.current = null;
+    setInvoices([]);
+    setTransactions([]);
+    setQuotes([]);
+    setReceipts([]);
+    setExpenses([]);
+    setStockItems([]);
+    setContacts([]);
+    setCurrentUserId(null);
+    setCompanySettings({
+      companyName: '', nuit: '', address: '', city: '', phone: '', email: '',
+      bankAccounts: [], mobileContacts: [], setupComplete: false,
+    });
+    setUserEmail('');
+    setUserName('');
+  }
+
+  // ─── Auth lifecycle ───────────────────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+      if (session) {
+        setCurrentUserId(session.user.id);
+        loadUserData(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+      if (session) {
+        setCurrentUserId(session.user.id);
+        loadUserData(session.user.id);
+      } else {
+        clearUserData();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ─── Preference persistence ───────────────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem('invstock_lang', language);
+  }, [language]);
+
+  useEffect(() => {
+    localStorage.setItem('invstock_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // ─── Keyboard shortcuts ───────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeys = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setActiveModal('new_invoice');
+      }
+      if (e.altKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        setLanguage(lang => lang === 'en' ? 'pt' : 'en');
+        triggerToast('Locale switched', 'Idioma alterado', 'Language updated instantly.', 'Idioma actualizado de imediato.', 'info');
+      }
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, []);
+
+  // ─── Toast ────────────────────────────────────────────────────────────────
+  const triggerToast = (
+    title: string,
+    titlePt: string,
+    desc: string,
+    descPt: string,
+    type: 'success' | 'info' | 'error'
+  ) => {
+    const id = Date.now().toString();
+    const newToast: ToastMessage = { id, title, titlePt, description: desc, descriptionPt: descPt, type };
+    setToasts(prev => [...prev, newToast]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  };
+
+  const handleDismissToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  // ─── Settings handlers ─────────────────────────────────────────────────────
+  const handleSaveSettings = async (updates: Partial<CompanySettings>) => {
+    if (!currentUserId) return;
+    const updated = await db.upsertCompanySettings(currentUserId, updates);
+    if (updated) setCompanySettings(updated);
+  };
+
+  const handleGenerateModel = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const sampleInvoice: Invoice = {
+      id: 'sample',
+      seqNumber: 1,
+      invoiceNumber: 'INV-0001',
+      client: 'Cliente Exemplo',
+      initials: 'CE',
+      issueDate: today,
+      date: new Date().toLocaleDateString('en-US'),
+      datePt: new Date().toLocaleDateString('pt-MZ'),
+      amount: 50000,
+      status: 'Pending',
+      statusPt: 'Pendente',
+      logoBg: '',
+    };
+    const sampleItems: DocumentItem[] = [
+      { description: 'Serviço de consultoria ERP', quantity: 1, unitPrice: 30000 },
+      { description: 'Licença anual de software', quantity: 1, unitPrice: 20000 },
+    ];
+    generateInvoicePDF(sampleInvoice, sampleItems, companySettings);
+  };
+
+  // ─── Handlers ─────────────────────────────────────────────────────────────
+
+  // Line item helpers
+  const addInvoiceItem = () => {
+    setFormInvoiceItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
+  };
+  const updateInvoiceItem = (idx: number, field: keyof DocumentItem, value: string | number) => {
+    setFormInvoiceItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  };
+  const removeInvoiceItem = (idx: number) => {
+    setFormInvoiceItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const addQuoteItem = () => {
+    setFormQuoteItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
+  };
+  const updateQuoteItem = (idx: number, field: keyof DocumentItem, value: string | number) => {
+    setFormQuoteItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  };
+  const removeQuoteItem = (idx: number) => {
+    setFormQuoteItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const calcInvoiceSubtotal = () => formInvoiceItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
+  const calcQuoteSubtotal = () => formQuoteItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
+
+  const handleCreateInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formInvoiceClient.trim()) {
+      triggerToast('Validation Error', 'Erro de Validação', 'Please supply all parameters.', 'Por favor forneça todos os parâmetros.', 'error');
+      return;
+    }
+    const amt = calcInvoiceSubtotal();
+    if (!currentUserId) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const defaultDue = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const newInv = await db.createInvoice({
+      userId: currentUserId,
+      client: formInvoiceClient.trim(),
+      clientNuit: formInvoiceClientNuit.trim() || undefined,
+      description: formInvoiceDescription.trim() || undefined,
+      amount: amt,
+      status: formInvoiceStatus,
+      issueDate: today,
+      dueDate: formInvoiceDueDate || defaultDue,
+      logoBg: 'bg-emerald-50 text-emerald-800 border border-emerald-500',
+    });
+
+    if (newInv) {
+      // Save line items
+      const validItems = formInvoiceItems.filter(it => it.description.trim());
+      if (validItems.length > 0) {
+        await db.createInvoiceItems(newInv.id, validItems);
+      }
+
+      setInvoices(prev => [newInv, ...prev]);
+      setTransactions(prev => [invoicesToTransactions([newInv])[0], ...prev]);
+      setActiveModal(null);
+      setFormInvoiceClient('');
+      setFormInvoiceClientNuit('');
+      setFormInvoiceStatus('Pending');
+      setFormInvoiceDescription('');
+      setFormInvoiceDueDate('');
+      setFormInvoiceItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+      triggerToast(
+        'Invoice Ledger Updated',
+        'Razão de Facturação Actualizado',
+        `Invoice registry ${newInv.invoiceNumber} created for client ${newInv.client}.`,
+        `Registro de factura ${newInv.invoiceNumber} de ${newInv.client} adicionado.`,
+        'success'
+      );
+    } else {
+      triggerToast('Error', 'Erro', 'Failed to create invoice.', 'Falha ao criar factura.', 'error');
+    }
+  };
+
+  const handleMarkAsPaid = async (invoiceId: string, paymentMethod: string) => {
+    if (!currentUserId) return;
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (!inv) return;
+
+    const methodPtMap: Record<string, string> = {
+      'Bank Transfer': 'Transferência Bancária',
+      'M-Pesa': 'M-Pesa',
+      'Cash': 'Dinheiro',
+      'E-Mola': 'E-Mola',
+    };
+
+    const ok = await db.updateInvoiceStatus(invoiceId, 'Paid');
+    if (!ok) {
+      triggerToast('Error', 'Erro', 'Failed to update invoice.', 'Falha ao actualizar factura.', 'error');
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const newReceipt = await db.createReceipt({
+      userId: currentUserId,
+      invoiceId: inv.id,
+      invoiceRef: inv.invoiceNumber,
+      client: inv.client,
+      amount: inv.amount,
+      method: paymentMethod,
+      methodPt: methodPtMap[paymentMethod] ?? paymentMethod,
+      paymentDate: today,
+    });
+
+    setInvoices(prev => prev.map(i => i.id === invoiceId
+      ? { ...i, status: 'Paid', statusPt: 'Pago' }
+      : i
+    ));
+    setTransactions(prev => prev.map(t => t.id === invoiceId + '-tx'
+      ? { ...t, status: 'Paid', statusPt: 'Pago' }
+      : t
+    ));
+    if (newReceipt) {
+      setReceipts(prev => [newReceipt, ...prev]);
+    }
+
+    triggerToast(
+      'Invoice Settled',
+      'Factura Liquidada',
+      `Invoice ${inv.invoiceNumber} marked as paid. Receipt generated.`,
+      `Factura ${inv.invoiceNumber} marcada como paga. Recibo gerado.`,
+      'success'
+    );
+  };
+
+  const handleApproveQuote = async (quoteId: string, quoteNum: string) => {
+    const ok = await db.updateQuoteStatus(quoteId, 'Approved');
+    if (ok) {
+      setQuotes(prev => prev.map(q => q.id === quoteId
+        ? { ...q, status: 'Approved', statusPt: 'Aprovado' }
+        : q
+      ));
+      triggerToast(
+        'Quote Proposal Approved',
+        'Proposta Aprovada',
+        `Quote ${quoteNum} has been successfully promoted to ready-to-bill.`,
+        `A proposta ${quoteNum} foi promovida com sucesso para facturação.`,
+        'success'
+      );
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    const ok = await db.deleteExpense(expenseId);
+    if (ok) {
+      setExpenses(prev => prev.filter(e => e.id !== expenseId));
+      triggerToast('Expense Removed', 'Despesa Removida', 'Expense record deleted.', 'Registo de despesa eliminado.', 'info');
+    }
+  };
+
+  const handleCreateStockItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formStockName.trim() || !formStockSku.trim() || !formStockPrice.trim() || !formStockLevel.trim() || !formStockMax.trim()) {
+      triggerToast('Validation Error', 'Erro', 'Please populate all fields.', 'Por favor preencha todos os campos.', 'error');
+      return;
+    }
+    const priceNum = parseFloat(formStockPrice);
+    const levNum = parseInt(formStockLevel);
+    const maxNum = parseInt(formStockMax);
+    if (isNaN(priceNum) || isNaN(levNum) || isNaN(maxNum)) {
+      triggerToast('Validation Error', 'Erro', 'Stock parameters must be numeric.', 'Os parâmetros numéricos de stock têm que ser válidos.', 'error');
+      return;
+    }
+    if (!currentUserId) return;
+
+    const warehouseStr = formStockWarehouse === 'NYC' ? 'Primary Hub (NYC)' : 'West Coast Annex';
+    const warehouseStrPt = formStockWarehouse === 'NYC' ? 'Hub Principal (Maputo)' : 'Anexo da Beira';
+    const categoryPtMap: Record<string, string> = {
+      Hardware: 'Hardware',
+      Accessories: 'Acessórios',
+      Structural: 'Estrutural',
+      Infrastructure: 'Infraestrutura',
+    };
+
+    const newItem = await db.createStockItem({
+      userId: currentUserId,
+      name: formStockName.trim(),
+      sku: formStockSku.toUpperCase().trim(),
+      category: formStockCategory,
+      categoryPt: categoryPtMap[formStockCategory] ?? formStockCategory,
+      stockLevel: levNum,
+      maxStock: maxNum,
+      price: priceNum,
+      warehouse: warehouseStr,
+      warehousePt: warehouseStrPt,
+    });
+
+    if (newItem) {
+      setStockItems(prev => [newItem, ...prev]);
+      setActiveModal(null);
+      setFormStockName('');
+      setFormStockSku('');
+      setFormStockPrice('');
+      setFormStockLevel('');
+      setFormStockMax('');
+      triggerToast(
+        'Item Registered',
+        'Artigo Registado',
+        `SKU ${newItem.sku} successfully filed to warehouse.`,
+        `Artigo SKU ${newItem.sku} catalogado com sucesso nos armazéns.`,
+        'success'
+      );
+    } else {
+      triggerToast('Error', 'Erro', 'Failed to create stock item.', 'Falha ao criar artigo.', 'error');
+    }
+  };
+
+  const handleCreateQuote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formQuoteClient.trim()) {
+      triggerToast('Validation Error', 'Erro', 'Supply parameters.', 'Por favor forneça os parâmetros.', 'error');
+      return;
+    }
+    const amt = calcQuoteSubtotal();
+    if (!currentUserId) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const newQt = await db.createQuote({
+      userId: currentUserId,
+      client: formQuoteClient.trim(),
+      clientNuit: formQuoteClientNuit.trim() || undefined,
+      description: formQuoteDescription.trim() || undefined,
+      amount: amt,
+      issueDate: today,
+      validityDays: parseInt(formQuoteValidity) || 15,
+      logoBg: 'bg-amber-100 text-amber-800',
+    });
+
+    if (newQt) {
+      const validItems = formQuoteItems.filter(it => it.description.trim());
+      if (validItems.length > 0) {
+        await db.createQuoteItems(newQt.id, validItems);
+      }
+
+      setQuotes(prev => [newQt, ...prev]);
+      setActiveModal(null);
+      setFormQuoteClient('');
+      setFormQuoteClientNuit('');
+      setFormQuoteDescription('');
+      setFormQuoteValidity('15');
+      setFormQuoteItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+      triggerToast(
+        'Simulation proposal launched',
+        'Proposta simulada',
+        `Proposal draft ${newQt.quoteNumber} holds net status approval flow.`,
+        `Criação do esboço de orçamento ${newQt.quoteNumber} adicionado para autorizações.`,
+        'success'
+      );
+    } else {
+      triggerToast('Error', 'Erro', 'Failed to create quote.', 'Falha ao criar proposta.', 'error');
+    }
+  };
+
+  const handleCreateExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formExpenseMerchant.trim() || !formExpenseAmount.trim()) {
+      triggerToast('Validation Error', 'Erro', 'Populate all text areas.', 'Preencha todos os campos.', 'error');
+      return;
+    }
+    const amt = parseFloat(formExpenseAmount);
+    if (isNaN(amt)) return;
+    if (!currentUserId) return;
+
+    const categoryPtMap: Record<string, string> = {
+      Logistics: 'Logística',
+      'Office Supplies': 'Material de Escritório',
+      'Cloud Infrastructure': 'Infraestrutura Cloud',
+    };
+
+    const newExp = await db.createExpense({
+      userId: currentUserId,
+      merchant: formExpenseMerchant.trim(),
+      category: formExpenseCategory,
+      categoryPt: categoryPtMap[formExpenseCategory] ?? formExpenseCategory,
+      amount: amt,
+      expenseDate: formExpenseDate || new Date().toISOString().slice(0, 10),
+      notes: formExpenseNotes.trim() || undefined,
+    });
+
+    if (newExp) {
+      setExpenses(prev => [newExp, ...prev]);
+      setActiveModal(null);
+      setFormExpenseMerchant('');
+      setFormExpenseAmount('');
+      setFormExpenseNotes('');
+      setFormExpenseDate(new Date().toISOString().slice(0, 10));
+      triggerToast(
+        'Expense Dispatched',
+        'Despesa Enviada',
+        `Outlay tracking file ${newExp.ref} raised for authorization review.`,
+        `Documento de despesa ${newExp.ref} enviado para validação administrativa.`,
+        'success'
+      );
+    } else {
+      triggerToast('Error', 'Erro', 'Failed to create expense.', 'Falha ao criar despesa.', 'error');
+    }
+  };
+
+  const handleCreateContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formContactName.trim() || !formContactEmail.trim() || !formContactCompany.trim()) {
+      triggerToast('Validation Error', 'Erro', 'Fill required columns.', 'Preencha os campos obrigatórios.', 'error');
+      return;
+    }
+    if (!currentUserId) return;
+
+    const newContact = await db.createContact({
+      userId: currentUserId,
+      name: formContactName.trim(),
+      email: formContactEmail.trim(),
+      phone: formContactPhone || '+258 84 000 0000',
+      company: formContactCompany.trim(),
+      role: formContactRole,
+      rolePt: formContactRole,
+      avatarColor: 'bg-indigo-600',
+    });
+
+    if (newContact) {
+      setContacts(prev => [newContact, ...prev]);
+      setActiveModal(null);
+      setFormContactName('');
+      setFormContactEmail('');
+      setFormContactPhone('');
+      setFormContactCompany('');
+      triggerToast(
+        'Contact Listed',
+        'Contacto Adicionado',
+        `Corporate directory record created for ${formContactName}.`,
+        `Ficha corporativa de contacto criada para ${formContactName}.`,
+        'success'
+      );
+    } else {
+      triggerToast('Error', 'Erro', 'Failed to create contact.', 'Falha ao criar contacto.', 'error');
+    }
+  };
+
+  // PDF Report generation
+  const handleTriggerReportGeneration = () => {
+    setActiveModal('generate_report');
+    setReportProgress(5);
+    const interval = setInterval(() => {
+      setReportProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setActiveModal(null);
+            // Generate the real PDF
+            generateFinancialReportPDF(invoices, quotes, receipts, expenses, companySettings);
+            triggerToast(
+              'PDF Summary Exported',
+              'Consolidação PDF Pronta',
+              'Enterprise quarterly balance consolidated successfully. Local download triggered.',
+              'Equilíbrio comercial consolidado exportado com sucesso. Verifique downloads.',
+              'success'
+            );
+          }, 400);
+          return 100;
+        }
+        return prev + 15;
+      });
+    }, 150);
+  };
+
+  // ─── Loading Screen ────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen w-full bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+            {language === 'en' ? 'Connecting to workspace...' : 'A conectar ao sistema...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Auth Screen ────────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <AuthView
+        language={language}
+        setLanguage={setLanguage}
+        onLoginSuccess={() => {
+          setIsAuthenticated(true);
+          triggerToast(
+            'Welcome Back',
+            'Bem-vindo de volta',
+            'Connection to enterprise workspace established securely.',
+            'Central de trabalho sincronizada e acessível em segurança.',
+            'success'
+          );
+        }}
+      />
+    );
+  }
+
+  // ─── Main App ──────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-slate-100 font-sans antialiased text-slate-800 transition-colors">
+      <div className="flex min-h-screen">
+
+        {/* Left Sidebar */}
+        <SidebarLeft
+          activeTab={activeTab}
+          setActiveTab={navigateTo}
+          language={language}
+          setLanguage={setLanguage}
+          onLogout={async () => {
+            if (confirm(language === 'en' ? 'Are you sure you want to log out?' : 'Tem a certeza que deseja terminar sessão?')) {
+              await supabase.auth.signOut();
+              setIsAuthenticated(false);
+              triggerToast(
+                'Logged Out Successfully',
+                'Sessão Encerrada com Sucesso',
+                'Your session has been terminated securely.',
+                'Sua sessão foi encerrada em segurança.',
+                'info'
+              );
+            }
+          }}
+          userName={userName}
+        />
+
+        {/* Right Sidebar */}
+        <SidebarRight
+          activeTab={activeTab}
+          setActiveTab={navigateTo}
+          language={language}
+          companyName={companySettings.companyName}
+        />
+
+        {/* Main Content Pane */}
+        <div className="flex-1 flex flex-col min-h-screen pb-24">
+
+          {/* Dynamic header */}
+          <Header
+            language={language}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            onNewInvoice={() => setActiveModal('new_invoice')}
+            onGenerateReport={handleTriggerReportGeneration}
+            onNewItem={() => setActiveModal('add_item')}
+            activeTab={activeTab}
+            userEmail={userEmail}
+            userName={userName}
+            onNavigateToSettings={() => navigateTo('settings')}
+          />
+
+          {/* Central main page container */}
+          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 text-left h-full">
+            <div className="mx-auto w-full max-w-7xl">
+
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                transactions={transactions}
+                stockItems={stockItems}
+                invoices={invoices}
+                language={language}
+                currency={currency}
+                onNavigate={navigateTo}
+                onNewInvoice={() => setActiveModal('new_invoice')}
+                onAddStock={() => setActiveModal('add_item')}
+                onGenerateReport={handleTriggerReportGeneration}
+              />
+            )}
+
+            {activeTab === 'stock' && (
+              <StockView
+                stockItems={stockItems}
+                setStockItems={setStockItems}
+                language={language}
+                currency={currency}
+                onAddItem={() => setActiveModal('add_item')}
+                triggerToast={triggerToast}
+                searchQuery={searchQuery}
+              />
+            )}
+
+            {activeTab === 'invoices' && (
+              <InvoicesView
+                invoices={invoices}
+                setInvoices={setInvoices}
+                language={language}
+                currency={currency}
+                onNewInvoice={() => setActiveModal('new_invoice')}
+                triggerToast={triggerToast}
+                searchQuery={searchQuery}
+                onMarkAsPaid={handleMarkAsPaid}
+                companySettings={companySettings}
+              />
+            )}
+
+            {activeTab === 'quotes' && (
+              <QuotesView
+                quotes={quotes}
+                setQuotes={setQuotes}
+                language={language}
+                currency={currency}
+                onNewQuote={() => setActiveModal('new_proposal')}
+                triggerToast={triggerToast}
+                searchQuery={searchQuery}
+                onApproveQuote={handleApproveQuote}
+                companySettings={companySettings}
+              />
+            )}
+
+            {activeTab === 'receipts' && (
+              <ReceiptsView
+                receipts={receipts}
+                language={language}
+                currency={currency}
+                searchQuery={searchQuery}
+                companySettings={companySettings}
+              />
+            )}
+
+            {activeTab === 'expenses' && (
+              <ExpensesView
+                expenses={expenses}
+                setExpenses={setExpenses}
+                language={language}
+                currency={currency}
+                onNewExpense={() => setActiveModal('file_expense')}
+                triggerToast={triggerToast}
+                searchQuery={searchQuery}
+                onDeleteExpense={handleDeleteExpense}
+              />
+            )}
+
+            {activeTab === 'contacts' && (
+              <ContactsView
+                contacts={contacts}
+                setContacts={setContacts}
+                language={language}
+                onNewContact={() => setActiveModal('new_contact')}
+                searchQuery={searchQuery}
+              />
+            )}
+
+            {activeTab === 'news' && (
+              <NewsView
+                language={language}
+                triggerToast={triggerToast}
+              />
+            )}
+
+            {activeTab === 'settings' && companySettings.setupComplete && (
+              <SettingsView
+                language={language}
+                settings={companySettings}
+                onSave={handleSaveSettings}
+                onComplete={() => {}}
+                isFirstSetup={false}
+                onGenerateModel={handleGenerateModel}
+              />
+            )}
+
+            {activeTab === 'support' && (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 space-y-6 max-w-4xl text-left">
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Database size={18} className="text-blue-600" />
+                    <span>{language === 'en' ? 'InvStock Systems Support Channel' : 'Canal de Suporte InvStock'}</span>
+                  </h3>
+                  <p className="text-xs text-slate-450 mt-1">
+                    {language === 'en' ? 'Direct secure feedback loops and dynamic ERP credentials.' : 'Configurações de rede e canais de comunicação corporativos.'}
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-lg">
+                    <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                      {language === 'en' ? 'Database Synchronization Clusters' : 'Sincronização do Banco de Dados'}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {language === 'en'
+                        ? 'Supabase cloud database provides real-time persistence. All data is stored securely and accessible from any device.'
+                        : 'A base de dados Supabase em nuvem oferece persistência em tempo real. Todos os dados são armazenados de forma segura e acessíveis de qualquer dispositivo.'
+                      }
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-lg">
+                    <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                      {language === 'en' ? 'How does language and currency scaling work?' : 'Como funciona a mudança de moedas e do idioma?'}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {language === 'en'
+                        ? 'Double local state translation models provide instantaneous switching. Use Alt+L or the Sidebar buttons. Currency toggle calculates exchange ratios automatically (1 USD = 63.50 MZN).'
+                        : 'A tradução ocorre instantaneamente no navegador. Use Alt+L ou mude na barra lateral. A conversão aplica rácios automáticos para Meticais (1 USD = 63.50 MZN).'
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1 flex gap-3 p-4 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <Mail className="text-blue-500 flex-shrink-0" size={16} />
+                    <div>
+                      <h5 className="font-extrabold text-[11px] text-slate-700 dark:text-slate-200 uppercase tracking-widest">IT Systems Support</h5>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">support@invstock.com</p>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 flex gap-3 p-4 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <Phone className="text-emerald-500 flex-shrink-0" size={16} />
+                    <div>
+                      <h5 className="font-extrabold text-[11px] text-slate-700 dark:text-slate-200 uppercase tracking-widest">Corporate Hotline</h5>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">+258 21 000 112</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            </div>
+          </main>
+        </div>
+      </div>
+
+      {/* FIRST-SETUP WIZARD — rendered outside all tab/layout containers */}
+      {isAuthenticated && !loading && !companySettings.setupComplete && (
+        <SettingsView
+          language={language}
+          settings={companySettings}
+          onSave={handleSaveSettings}
+          onComplete={() => setCompanySettings(prev => ({ ...prev, setupComplete: true }))}
+          isFirstSetup={true}
+          onGenerateModel={handleGenerateModel}
+        />
+      )}
+
+      {/* DISMISSABLE FLOATING TOASTS */}
+      <div className="fixed bottom-6 left-16 z-50 space-y-3 pointer-events-none w-full max-w-[24rem]">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="pointer-events-auto bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded-xl p-4 shadow-2xl flex gap-3.5 items-start animation-slide-in w-full"
+          >
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+              toast.type === 'success'
+                ? 'bg-emerald-100 text-emerald-800'
+                : toast.type === 'error'
+                ? 'bg-red-100 text-red-800'
+                : 'bg-blue-100 text-blue-800'
+            }`}>
+              {toast.type === 'success' ? <Check size={16} /> : <Info size={16} />}
+            </div>
+
+            <div className="flex-1 text-left">
+              <h4 className="font-extrabold text-xs text-slate-900 dark:text-white">
+                {language === 'en' ? toast.title : toast.titlePt}
+              </h4>
+              <p className="text-[10px] text-slate-450 mt-1 font-medium leading-relaxed">
+                {language === 'en' ? toast.description : toast.descriptionPt}
+              </p>
+            </div>
+
+            <button
+              onClick={() => handleDismissToast(toast.id)}
+              className="text-slate-400 hover:text-slate-705 p-0.5 rounded-full hover:bg-slate-100 inline-block cursor-pointer flex-shrink-0"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* MODAL DIALOGS */}
+      {activeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+
+          <div className="bg-white dark:bg-slate-955 w-full sm:w-[560px] max-w-[38rem] flex-shrink-0 rounded-2xl border border-slate-300 dark:border-slate-900 shadow-2xl max-h-[90vh] flex flex-col animation-scale-up text-left">
+
+            {/* Modal Title bar */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-900 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40">
+              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                {activeModal === 'new_invoice' && (language === 'en' ? 'Create New Invoice Ledger' : 'Registar Nova Factura')}
+                {activeModal === 'add_item' && (language === 'en' ? 'Add Inventory Item' : 'Catalogar Novo Item')}
+                {activeModal === 'new_proposal' && (language === 'en' ? 'Launch Price Simulation' : 'Criar Proposta de Orçamento')}
+                {activeModal === 'file_expense' && (language === 'en' ? 'Document Operational Outlay' : 'Registar Despesa Comercial')}
+                {activeModal === 'new_contact' && (language === 'en' ? 'Register New Business Contact' : 'Adicionar Contacto a Directório')}
+                {activeModal === 'generate_report' && (language === 'en' ? 'Consolidating Financial Aggregates' : 'Consolidando Relatórios Globais')}
+              </h3>
+
+              {activeModal !== 'generate_report' && (
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-full text-slate-400 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+
+            {/* Modal Scroll body */}
+            <div className="p-6 overflow-y-auto">
+
+              {/* A. Create Invoice Form */}
+              {activeModal === 'new_invoice' && (
+                <form onSubmit={handleCreateInvoice} className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Paying Client Company Name' : 'Companhia / Cliente'}</label>
+                    <input
+                      type="text"
+                      required
+                      value={formInvoiceClient}
+                      onChange={(e) => setFormInvoiceClient(e.target.value)}
+                      placeholder="TechSolutions S.A."
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Client NUIT (optional)' : 'NUIT do Cliente (opcional)'}</label>
+                    <input
+                      type="text"
+                      value={formInvoiceClientNuit}
+                      onChange={(e) => setFormInvoiceClientNuit(e.target.value)}
+                      placeholder="400261845"
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Initial Billing Status' : 'Estado de Liquidação'}</label>
+                    <select
+                      value={formInvoiceStatus}
+                      onChange={(e) => setFormInvoiceStatus(e.target.value as Invoice['status'])}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
+                    >
+                      <option value="Pending">{language === 'en' ? 'Pending settlement' : 'Pendente'}</option>
+                      <option value="Paid">{language === 'en' ? 'Paid completely' : 'Pago'}</option>
+                      <option value="Overdue">{language === 'en' ? 'Overdue debt' : 'Vencido'}</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Service / Product Description' : 'Descrição do Serviço / Produto'}</label>
+                    <textarea
+                      value={formInvoiceDescription}
+                      onChange={(e) => setFormInvoiceDescription(e.target.value)}
+                      placeholder={language === 'en' ? 'Describe the service or product...' : 'Descreva o serviço ou produto...'}
+                      rows={2}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 resize-none"
+                    />
+                  </div>
+
+                  {/* Line items */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Line Items' : 'Itens da Factura'}</label>
+                      <button type="button" onClick={addInvoiceItem} className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800">
+                        <Plus size={11} />
+                        {language === 'en' ? 'Add Item' : 'Adicionar Item'}
+                      </button>
+                    </div>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                      <table className="w-full text-[10px]">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider">{language === 'en' ? 'Description' : 'Descrição'}</th>
+                            <th className="text-center px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider w-14">{language === 'en' ? 'Qty' : 'Qtd'}</th>
+                            <th className="text-right px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider w-24">{language === 'en' ? 'Unit Price' : 'Preço Unit.'}</th>
+                            <th className="text-right px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider w-20">Total</th>
+                            <th className="w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {formInvoiceItems.map((it, idx) => (
+                            <tr key={idx}>
+                              <td className="px-2 py-1">
+                                <input
+                                  type="text"
+                                  value={it.description}
+                                  onChange={e => updateInvoiceItem(idx, 'description', e.target.value)}
+                                  placeholder={language === 'en' ? 'Item description' : 'Descrição do item'}
+                                  className="w-full bg-transparent outline-none text-slate-900 text-[11px]"
+                                />
+                              </td>
+                              <td className="px-2 py-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={it.quantity}
+                                  onChange={e => updateInvoiceItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                  className="w-full bg-transparent outline-none text-slate-900 text-[11px] text-center"
+                                />
+                              </td>
+                              <td className="px-2 py-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={it.unitPrice}
+                                  onChange={e => updateInvoiceItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  className="w-full bg-transparent outline-none text-slate-900 text-[11px] text-right"
+                                />
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono text-slate-700 text-[11px]">
+                                {formatValue(it.quantity * it.unitPrice, 'MZN')}
+                              </td>
+                              <td className="px-1 py-1 text-center">
+                                <button type="button" onClick={() => removeInvoiceItem(idx)} className="text-red-400 hover:text-red-600">
+                                  <Trash2 size={11} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Totals summary */}
+                    <div className="flex flex-col items-end gap-0.5 text-[11px]">
+                      <div className="flex gap-4">
+                        <span className="text-slate-500">{language === 'en' ? 'Subtotal:' : 'Subtotal:'}</span>
+                        <span className="font-mono font-bold text-slate-800">{formatValue(calcInvoiceSubtotal(), 'MZN')}</span>
+                      </div>
+                      <div className="flex gap-4">
+                        <span className="text-slate-500">ISPC (3%):</span>
+                        <span className="font-mono font-bold text-slate-800">{formatValue(calcInvoiceSubtotal() * 0.03, 'MZN')}</span>
+                      </div>
+                      <div className="flex gap-4 border-t border-slate-200 pt-0.5">
+                        <span className="font-bold text-slate-700">Total:</span>
+                        <span className="font-mono font-black text-red-600">{formatValue(calcInvoiceSubtotal() * 1.03, 'MZN')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Due Date (optional)' : 'Data de Vencimento (opcional)'}</label>
+                    <input
+                      type="date"
+                      value={formInvoiceDueDate}
+                      onChange={(e) => setFormInvoiceDueDate(e.target.value)}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-500 font-semibold text-xs rounded-lg transition-all cursor-pointer"
+                    >
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer"
+                    >
+                      {language === 'en' ? 'Save Invoice' : 'Confirmar Factura'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* B. Add Stock Item Form */}
+              {activeModal === 'add_item' && (
+                <form onSubmit={handleCreateStockItem} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Product Name' : 'Nome do Produto'}</label>
+                      <input
+                        type="text"
+                        required
+                        value={formStockName}
+                        onChange={(e) => setFormStockName(e.target.value)}
+                        placeholder="Intel Core Ultra Processor"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SKU</label>
+                      <input
+                        type="text"
+                        required
+                        value={formStockSku}
+                        onChange={(e) => setFormStockSku(e.target.value)}
+                        placeholder="PRC-44W-XT"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Category' : 'Categoria'}</label>
+                      <select
+                        value={formStockCategory}
+                        onChange={(e) => setFormStockCategory(e.target.value)}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
+                      >
+                        <option value="Hardware">{language === 'en' ? 'Hardware' : 'Hardware Componentes'}</option>
+                        <option value="Accessories">{language === 'en' ? 'Accessories' : 'Acessórios'}</option>
+                        <option value="Structural">{language === 'en' ? 'Structural' : 'Estrutural'}</option>
+                        <option value="Infrastructure">{language === 'en' ? 'Infrastructure' : 'Infraestrutura'}</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Warehouse Hub' : 'Armazém de Entrega'}</label>
+                      <select
+                        value={formStockWarehouse}
+                        onChange={(e) => setFormStockWarehouse(e.target.value)}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
+                      >
+                        <option value="NYC">{language === 'en' ? 'Primary Hub (NYC)' : 'Hub Principal (Maputo)'}</option>
+                        <option value="Beira">{language === 'en' ? 'West Coast Annex' : 'Anexo da Beira'}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Unit Price' : 'Preço Unitário'}</label>
+                      <input
+                        type="number"
+                        required
+                        step="any"
+                        value={formStockPrice}
+                        onChange={(e) => setFormStockPrice(e.target.value)}
+                        placeholder="145.00"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Stock level' : 'Qnt Stock'}</label>
+                      <input
+                        type="number"
+                        required
+                        value={formStockLevel}
+                        onChange={(e) => setFormStockLevel(e.target.value)}
+                        placeholder="15"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Limit Max' : 'Limite Máx'}</label>
+                      <input
+                        type="number"
+                        required
+                        value={formStockMax}
+                        onChange={(e) => setFormStockMax(e.target.value)}
+                        placeholder="200"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-855 text-slate-500 font-semibold text-xs rounded-lg transition-all cursor-pointer"
+                    >
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer"
+                    >
+                      {language === 'en' ? 'Add Item' : 'Criar Item'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* C. New Proposal (Quote) Form */}
+              {activeModal === 'new_proposal' && (
+                <form onSubmit={handleCreateQuote} className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Target Company / Client' : 'Cliente'}</label>
+                    <input
+                      type="text"
+                      required
+                      value={formQuoteClient}
+                      onChange={(e) => setFormQuoteClient(e.target.value)}
+                      placeholder="Electricidade de Moçambique S.A."
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Client NUIT (optional)' : 'NUIT do Cliente (opcional)'}</label>
+                    <input
+                      type="text"
+                      value={formQuoteClientNuit}
+                      onChange={(e) => setFormQuoteClientNuit(e.target.value)}
+                      placeholder="400261845"
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Service Description' : 'Descrição do Serviço'}</label>
+                    <textarea
+                      value={formQuoteDescription}
+                      onChange={(e) => setFormQuoteDescription(e.target.value)}
+                      placeholder={language === 'en' ? 'Describe the proposed service...' : 'Descreva o serviço proposto...'}
+                      rows={2}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200 resize-none outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Line items */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Line Items' : 'Itens da Proposta'}</label>
+                      <button type="button" onClick={addQuoteItem} className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800">
+                        <Plus size={11} />
+                        {language === 'en' ? 'Add Item' : 'Adicionar Item'}
+                      </button>
+                    </div>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                      <table className="w-full text-[10px]">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider">{language === 'en' ? 'Description' : 'Descrição'}</th>
+                            <th className="text-center px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider w-14">{language === 'en' ? 'Qty' : 'Qtd'}</th>
+                            <th className="text-right px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider w-24">{language === 'en' ? 'Unit Price' : 'Preço Unit.'}</th>
+                            <th className="text-right px-2 py-1.5 font-bold text-slate-500 uppercase tracking-wider w-20">Total</th>
+                            <th className="w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {formQuoteItems.map((it, idx) => (
+                            <tr key={idx}>
+                              <td className="px-2 py-1">
+                                <input
+                                  type="text"
+                                  value={it.description}
+                                  onChange={e => updateQuoteItem(idx, 'description', e.target.value)}
+                                  placeholder={language === 'en' ? 'Item description' : 'Descrição do item'}
+                                  className="w-full bg-transparent outline-none text-slate-900 text-[11px]"
+                                />
+                              </td>
+                              <td className="px-2 py-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={it.quantity}
+                                  onChange={e => updateQuoteItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                  className="w-full bg-transparent outline-none text-slate-900 text-[11px] text-center"
+                                />
+                              </td>
+                              <td className="px-2 py-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={it.unitPrice}
+                                  onChange={e => updateQuoteItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  className="w-full bg-transparent outline-none text-slate-900 text-[11px] text-right"
+                                />
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono text-slate-700 text-[11px]">
+                                {formatValue(it.quantity * it.unitPrice, 'MZN')}
+                              </td>
+                              <td className="px-1 py-1 text-center">
+                                <button type="button" onClick={() => removeQuoteItem(idx)} className="text-red-400 hover:text-red-600">
+                                  <Trash2 size={11} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Totals summary */}
+                    <div className="flex flex-col items-end gap-0.5 text-[11px]">
+                      <div className="flex gap-4">
+                        <span className="text-slate-500">{language === 'en' ? 'Subtotal:' : 'Subtotal:'}</span>
+                        <span className="font-mono font-bold text-slate-800">{formatValue(calcQuoteSubtotal(), 'MZN')}</span>
+                      </div>
+                      <div className="flex gap-4">
+                        <span className="text-slate-500">ISPC (3%):</span>
+                        <span className="font-mono font-bold text-slate-800">{formatValue(calcQuoteSubtotal() * 0.03, 'MZN')}</span>
+                      </div>
+                      <div className="flex gap-4 border-t border-slate-200 pt-0.5">
+                        <span className="font-bold text-slate-700">Total:</span>
+                        <span className="font-mono font-black text-amber-700">{formatValue(calcQuoteSubtotal() * 1.03, 'MZN')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Validity (days)' : 'Validade (dias)'}</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={formQuoteValidity}
+                      onChange={(e) => setFormQuoteValidity(e.target.value)}
+                      placeholder="15"
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 text-slate-500 font-semibold text-xs"
+                    >
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg"
+                    >
+                      {language === 'en' ? 'Create Proposal' : 'Gerar Proposta'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* D. File Expense Form */}
+              {activeModal === 'file_expense' && (
+                <form onSubmit={handleCreateExpense} className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Merchant / Vendor Name' : 'Loja / Fornecedor'}</label>
+                    <input
+                      type="text"
+                      required
+                      value={formExpenseMerchant}
+                      onChange={(e) => setFormExpenseMerchant(e.target.value)}
+                      placeholder="Toyota Motors Beira"
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Category' : 'Categoria'}</label>
+                      <select
+                        value={formExpenseCategory}
+                        onChange={(e) => setFormExpenseCategory(e.target.value)}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-105 font-semibold"
+                      >
+                        <option value="Logistics">{language === 'en' ? 'Logistics' : 'Logística'}</option>
+                        <option value="Office Supplies">{language === 'en' ? 'Office Supplies' : 'Material de Escritório'}</option>
+                        <option value="Cloud Infrastructure">{language === 'en' ? 'Cloud Infrastructure' : 'Infraestrutura Cloud'}</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Outlay Sum (MZN)' : 'Valor Pago (MZN)'}</label>
+                      <input
+                        type="number"
+                        required
+                        step="any"
+                        value={formExpenseAmount}
+                        onChange={(e) => setFormExpenseAmount(e.target.value)}
+                        placeholder="450.00"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Expense Date' : 'Data da Despesa'}</label>
+                    <input
+                      type="date"
+                      value={formExpenseDate}
+                      onChange={(e) => setFormExpenseDate(e.target.value)}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Notes / Observations (optional)' : 'Notas / Observações (opcional)'}</label>
+                    <input
+                      type="text"
+                      value={formExpenseNotes}
+                      onChange={(e) => setFormExpenseNotes(e.target.value)}
+                      placeholder={language === 'en' ? 'Additional notes...' : 'Observações adicionais...'}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 text-slate-500 font-semibold text-xs"
+                    >
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg"
+                    >
+                      {language === 'en' ? 'Save record' : 'Salvar Despesa'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* E. New Contact Form */}
+              {activeModal === 'new_contact' && (
+                <form onSubmit={handleCreateContact} className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Full Contact name' : 'Nome Completo'}</label>
+                    <input
+                      type="text"
+                      required
+                      value={formContactName}
+                      onChange={(e) => setFormContactName(e.target.value)}
+                      placeholder="Engenheiro Artur Tembe"
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">E-mail</label>
+                      <input
+                        type="email"
+                        required
+                        value={formContactEmail}
+                        onChange={(e) => setFormContactEmail(e.target.value)}
+                        placeholder="artur@empresa.co.mz"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Phone Number' : 'Telefone Celular'}</label>
+                      <input
+                        type="text"
+                        value={formContactPhone}
+                        onChange={(e) => setFormContactPhone(e.target.value)}
+                        placeholder="+258 84 944 2333"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Company Name' : 'Companhia / Empresa'}</label>
+                      <input
+                        type="text"
+                        required
+                        value={formContactCompany}
+                        onChange={(e) => setFormContactCompany(e.target.value)}
+                        placeholder="Limpopo S.A."
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Professional Role' : 'Cargo Profissional'}</label>
+                      <input
+                        type="text"
+                        value={formContactRole}
+                        onChange={(e) => setFormContactRole(e.target.value)}
+                        placeholder="Director Executivo"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 text-slate-500 font-semibold text-xs rounded-lg"
+                    >
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg"
+                    >
+                      {language === 'en' ? 'Add Contact' : 'Guardar Ficha'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* F. Report Generation Progress */}
+              {activeModal === 'generate_report' && (
+                <div className="py-8 space-y-6 text-center">
+                  <div className="inline-flex w-12 h-12 rounded-full bg-blue-100 text-blue-600 items-center justify-center animate-bounce">
+                    <Database size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs text-slate-800">
+                      {language === 'en'
+                        ? 'Validating credit lines and regional inventories...'
+                        : 'A consolidar e processar relatórios fiscais...'
+                      }
+                    </h4>
+                    <p className="text-[10px] text-slate-450 mt-1">
+                      {language === 'en'
+                        ? 'Please do not interrupt server handshake protocols.'
+                        : 'Por favor aguarde enquanto compilamos os gráficos consolidados.'
+                      }
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-blue-600 h-full transition-all duration-150" style={{ width: `${reportProgress}%` }}></div>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold text-slate-400 block">{reportProgress}% CONSOLIDATED</span>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
