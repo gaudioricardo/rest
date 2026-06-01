@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { StockItem, Transaction, Invoice, Quote, Receipt, Expense, Contact, Language, Currency, ToastMessage, CompanySettings, DocumentItem } from './types';
+import { StockItem, Transaction, Invoice, Quote, Receipt, Expense, Contact, Language, Currency, ToastMessage, CompanySettings, DocumentItem, DebtClient } from './types';
 import SidebarLeft from './components/SidebarLeft';
 import SidebarRight from './components/SidebarRight';
 import Header from './components/Header';
@@ -16,6 +16,7 @@ import QuotesView from './components/QuotesView';
 import ReceiptsView from './components/ReceiptsView';
 import ExpensesView from './components/ExpensesView';
 import ContactsView from './components/ContactsView';
+import ClientesView from './components/ClientesView';
 import AuthView from './components/AuthView';
 import SettingsView from './components/SettingsView';
 import { supabase } from './lib/supabase';
@@ -24,8 +25,16 @@ import { generateInvoicePDF, generateFinancialReportPDF } from './lib/pdf';
 
 import { X, Check, Info, Mail, Phone, Database, Plus, Trash2 } from 'lucide-react';
 import { formatValue } from './data';
+import logoUrl from './assets/Logo.webp';
 
 export default function App() {
+
+  // ─── Preloader fixo de 3.5s — cobre todas as camadas ───────────────────
+  const [showPreloader, setShowPreloader] = useState<boolean>(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShowPreloader(false), 3500);
+    return () => clearTimeout(t);
+  }, []);
 
   // ─── Auth & Loading ──────────────────────────────────────────────────────
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -58,6 +67,7 @@ export default function App() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [debtClients, setDebtClients] = useState<DebtClient[]>([]);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -114,10 +124,19 @@ export default function App() {
   const [formContactCompany, setFormContactCompany] = useState('');
   const [formContactRole, setFormContactRole] = useState('Lead Specialist');
 
+  // Form state – DebtClient
+  const [formClientName, setFormClientName] = useState('');
+  const [formClientMovitel, setFormClientMovitel] = useState('');
+  const [formClientVodacom, setFormClientVodacom] = useState('');
+  const [formClientAddress, setFormClientAddress] = useState('');
+  const [formClientStatus, setFormClientStatus] = useState<DebtClient['status']>('Pendente');
+
   const [reportProgress, setReportProgress] = useState(0);
 
   // Ref to prevent double-load on strict mode
   const loadedRef = useRef<string | null>(null);
+  // Bloqueia o onAuthStateChange enquanto a carga inicial não terminou
+  const initDoneRef = useRef(false);
 
   // ─── Navigation guard ─────────────────────────────────────────────────────
   const navigateTo = (tab: string) => {
@@ -147,13 +166,14 @@ export default function App() {
     if (loadedRef.current === userId) return;
     loadedRef.current = userId;
 
-    const [invs, qts, rcs, exps, stock, ctcs, settingsData] = await Promise.all([
+    const [invs, qts, rcs, exps, stock, ctcs, dcs, settingsData] = await Promise.all([
       db.fetchInvoices(userId),
       db.fetchQuotes(userId),
       db.fetchReceipts(userId),
       db.fetchExpenses(userId),
       db.fetchStockItems(userId),
       db.fetchContacts(userId),
+      db.fetchDebtClients(userId),
       db.fetchCompanySettings(userId),
     ]);
 
@@ -164,6 +184,7 @@ export default function App() {
     setExpenses(exps);
     setStockItems(stock);
     setContacts(ctcs);
+    setDebtClients(dcs);
 
     if (settingsData) {
       setCompanySettings(settingsData);
@@ -192,6 +213,7 @@ export default function App() {
     setExpenses([]);
     setStockItems([]);
     setContacts([]);
+    setDebtClients([]);
     setCurrentUserId(null);
     setCompanySettings({
       companyName: '', nuit: '', address: '', city: '', phone: '', email: '',
@@ -201,18 +223,33 @@ export default function App() {
     setUserName('');
   }
 
+  // Favicon dinâmico com o logotipo
+  useEffect(() => {
+    const link: HTMLLinkElement =
+      document.querySelector("link[rel~='icon']") || document.createElement('link');
+    link.type = 'image/webp';
+    link.rel = 'icon';
+    link.href = logoUrl;
+    document.head.appendChild(link);
+  }, []);
+
   // ─── Auth lifecycle ───────────────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Carga inicial: aguarda dados antes de remover o preloader
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setIsAuthenticated(!!session);
       if (session) {
         setCurrentUserId(session.user.id);
-        loadUserData(session.user.id);
+        await loadUserData(session.user.id);
       }
+      initDoneRef.current = true;
       setLoading(false);
     });
 
+    // Mudanças de auth subsequentes (logout, refresh de token)
+    // Ignoradas enquanto a inicialização inicial ainda não terminou
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!initDoneRef.current) return;
       setIsAuthenticated(!!session);
       if (session) {
         setCurrentUserId(session.user.id);
@@ -650,6 +687,65 @@ export default function App() {
     }
   };
 
+  const handleCreateDebtClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formClientName.trim()) {
+      triggerToast('Erro de Validação', 'Erro de Validação', 'Nome do cliente obrigatório.', 'Nome do cliente obrigatório.', 'error');
+      return;
+    }
+    if (!currentUserId) return;
+
+    const newClient = await db.createDebtClient({
+      userId: currentUserId,
+      fullName: formClientName.trim(),
+      movitelNumber: formClientMovitel.trim(),
+      vodacomNumber: formClientVodacom.trim(),
+      address: formClientAddress.trim(),
+      status: formClientStatus,
+    });
+
+    if (newClient) {
+      setDebtClients(prev => [newClient, ...prev]);
+      setActiveModal(null);
+      setFormClientName('');
+      setFormClientMovitel('');
+      setFormClientVodacom('');
+      setFormClientAddress('');
+      setFormClientStatus('Pendente');
+      triggerToast(
+        'Client Added',
+        'Cliente Adicionado',
+        `${newClient.fullName} added to pending clients list.`,
+        `${newClient.fullName} adicionado à lista de clientes pendentes.`,
+        'success'
+      );
+    } else {
+      triggerToast('Error', 'Erro', 'Failed to add client.', 'Falha ao adicionar cliente.', 'error');
+    }
+  };
+
+  const handleMarkClientLiquidado = async (id: string) => {
+    const ok = await db.updateDebtClientStatus(id, 'Liquidado');
+    if (ok) {
+      setDebtClients(prev => prev.map(c => c.id === id ? { ...c, status: 'Liquidado' } : c));
+      triggerToast(
+        'Account Settled',
+        'Conta Liquidada',
+        'Client account marked as settled.',
+        'Conta do cliente marcada como liquidada.',
+        'success'
+      );
+    }
+  };
+
+  const handleDeleteDebtClient = async (id: string) => {
+    const ok = await db.deleteDebtClient(id);
+    if (ok) {
+      setDebtClients(prev => prev.filter(c => c.id !== id));
+      triggerToast('Removed', 'Removido', 'Client record deleted.', 'Registo de cliente eliminado.', 'info');
+    }
+  };
+
   // PDF Report generation
   const handleTriggerReportGeneration = () => {
     setActiveModal('generate_report');
@@ -677,15 +773,23 @@ export default function App() {
     }, 150);
   };
 
-  // ─── Loading Screen ────────────────────────────────────────────────────────
-  if (loading) {
+  // ─── Preloader / Loading Screen ───────────────────────────────────────────
+  // Mostra enquanto loading OU 3.5s ainda não passaram — o que durar mais
+  if (loading || showPreloader) {
     return (
-      <div className="min-h-screen w-full bg-slate-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
-            {language === 'en' ? 'Connecting to workspace...' : 'A conectar ao sistema...'}
-          </p>
+      <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center gap-7">
+        <img src={logoUrl} alt="Logo" className="w-28 h-28 object-contain select-none" />
+        <p className="font-playfair text-slate-700 text-xl italic font-normal tracking-wide">
+          Were growth finds space
+        </p>
+        <div className="flex items-end gap-2">
+          {[0, 1, 2, 3].map(i => (
+            <span
+              key={i}
+              className="dot-bounce block w-2 h-2 bg-secondary rounded-full"
+              style={{ animationDelay: `${i * 0.2}s` }}
+            />
+          ))}
         </div>
       </div>
     );
@@ -854,6 +958,18 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'clientes' && (
+              <ClientesView
+                clients={debtClients}
+                setClients={setDebtClients}
+                language={language}
+                onNewClient={() => setActiveModal('new_debt_client')}
+                onMarkLiquidado={handleMarkClientLiquidado}
+                onDeleteClient={handleDeleteDebtClient}
+                searchQuery={searchQuery}
+              />
+            )}
+
             {activeTab === 'news' && (
               <NewsView
                 language={language}
@@ -998,6 +1114,7 @@ export default function App() {
                 {activeModal === 'file_expense' && (language === 'en' ? 'Document Operational Outlay' : 'Registar Despesa Comercial')}
                 {activeModal === 'new_contact' && (language === 'en' ? 'Register New Business Contact' : 'Adicionar Contacto a Directório')}
                 {activeModal === 'generate_report' && (language === 'en' ? 'Consolidating Financial Aggregates' : 'Consolidando Relatórios Globais')}
+                {activeModal === 'new_debt_client' && (language === 'en' ? 'Add Pending Client' : 'Adicionar Cliente Pendente')}
               </h3>
 
               {activeModal !== 'generate_report' && (
@@ -1596,6 +1713,95 @@ export default function App() {
                       className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg"
                     >
                       {language === 'en' ? 'Add Contact' : 'Guardar Ficha'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* G. New Debt Client Form */}
+              {activeModal === 'new_debt_client' && (
+                <form onSubmit={handleCreateDebtClient} className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      {language === 'en' ? 'Full Name' : 'Nome Completo do Cliente'}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formClientName}
+                      onChange={(e) => setFormClientName(e.target.value)}
+                      placeholder="João Manuel Machava"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {language === 'en' ? 'Movitel Number' : 'Número Movitel'}
+                      </label>
+                      <input
+                        type="tel"
+                        value={formClientMovitel}
+                        onChange={(e) => setFormClientMovitel(e.target.value)}
+                        placeholder="+258 86 000 0000"
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {language === 'en' ? 'Vodacom Number' : 'Número Vodacom'}
+                      </label>
+                      <input
+                        type="tel"
+                        value={formClientVodacom}
+                        onChange={(e) => setFormClientVodacom(e.target.value)}
+                        placeholder="+258 84 000 0000"
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      {language === 'en' ? 'Address' : 'Morada'}
+                    </label>
+                    <input
+                      type="text"
+                      value={formClientAddress}
+                      onChange={(e) => setFormClientAddress(e.target.value)}
+                      placeholder="Av. 24 de Julho, Nº 123, Maputo"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      {language === 'en' ? 'Account Status' : 'Estado da Conta'}
+                    </label>
+                    <select
+                      value={formClientStatus}
+                      onChange={(e) => setFormClientStatus(e.target.value as DebtClient['status'])}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none cursor-pointer text-slate-900 font-semibold"
+                    >
+                      <option value="Pendente">{language === 'en' ? 'Pending' : 'Pendente'}</option>
+                      <option value="Liquidado">{language === 'en' ? 'Settled' : 'Liquidado'}</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 text-slate-500 font-semibold text-xs rounded-lg cursor-pointer"
+                    >
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-md cursor-pointer"
+                    >
+                      {language === 'en' ? 'Add Client' : 'Adicionar Cliente'}
                     </button>
                   </div>
                 </form>

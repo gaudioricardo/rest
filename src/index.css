@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", sans-serif;
   --font-display: "Montserrat", sans-serif;
+  --font-playfair: "Playfair Display", serif;
 
   /* Custom Corporate Theme Colors */
   --color-primary: #0c1c48;
@@ -82,9 +83,22 @@ body {
   font-family: var(--font-display);
 }
 
+.font-playfair {
+  font-family: var(--font-playfair);
+}
+
 .hanken {
   font-family: var(--font-display);
   font-weight: 700;
+}
+
+@keyframes dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-7px); opacity: 1; }
+}
+
+.dot-bounce {
+  animation: dot-bounce 1.2s ease-in-out infinite;
 }
 
 /* Custom transitions and interactive states */

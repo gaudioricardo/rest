@@ -41,7 +41,7 @@ export default function NewsView({ language, triggerToast }: NewsViewProps) {
   ];
 
   return (
-    <div className="space-y-6 animation-fade-in text-left">
+    <div className="space-y-6 animation-fade-in text-left font-playfair">
       
       {/* Title block */}
       <div>

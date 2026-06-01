@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Search, Settings, FileDown, Plus } from 'lucide-react';
 import { Language } from '../types';
+import logoExtended from '../assets/Logo_extended.webp';
 
 interface HeaderProps {
   language: Language;
@@ -99,7 +100,14 @@ export default function Header({
   };
 
   return (
-    <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center w-full px-8 h-16 sticky top-0 z-35 transition-colors">
+    <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center w-full px-6 h-16 sticky top-0 z-35 transition-colors">
+
+      {/* Logo */}
+      <img
+        src={logoExtended}
+        alt="Logo"
+        className="h-8 object-contain mr-6 flex-shrink-0 select-none"
+      />
 
       {/* Search Input block (Expanded/Contextualized) */}
       <div className="flex items-center gap-4 flex-1 mr-4">

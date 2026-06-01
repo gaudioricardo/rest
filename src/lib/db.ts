@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabase';
-import { Invoice, Quote, Receipt, Expense, StockItem, Contact, DocumentItem, CompanySettings, BankAccount, MobileContact } from '../types';
+import { Invoice, Quote, Receipt, Expense, StockItem, Contact, DocumentItem, CompanySettings, BankAccount, MobileContact, DebtClient } from '../types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -624,6 +624,83 @@ export async function fetchCompanySettings(userId: string): Promise<CompanySetti
     if (error || !data) return null;
     return mapSettings(data);
   } catch { return null; }
+}
+
+// ─── DebtClient CRUD ─────────────────────────────────────────────────────────
+
+export function mapDebtClient(row: Record<string, unknown>): DebtClient {
+  return {
+    id: row.id as string,
+    fullName: row.full_name as string,
+    movitelNumber: (row.movitel_number as string) ?? '',
+    vodacomNumber: (row.vodacom_number as string) ?? '',
+    address: (row.address as string) ?? '',
+    status: (row.status as DebtClient['status']) ?? 'Pendente',
+    createdAt: row.created_at as string | undefined,
+  };
+}
+
+export async function fetchDebtClients(userId: string): Promise<DebtClient[]> {
+  try {
+    const { data, error } = await supabase
+      .from('debt_clients')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error || !data) return [];
+    return data.map(mapDebtClient);
+  } catch {
+    return [];
+  }
+}
+
+export async function createDebtClient(payload: {
+  userId: string;
+  fullName: string;
+  movitelNumber: string;
+  vodacomNumber: string;
+  address: string;
+  status: DebtClient['status'];
+}): Promise<DebtClient | null> {
+  try {
+    const { data, error } = await supabase
+      .from('debt_clients')
+      .insert({
+        user_id: payload.userId,
+        full_name: payload.fullName,
+        movitel_number: payload.movitelNumber,
+        vodacom_number: payload.vodacomNumber,
+        address: payload.address,
+        status: payload.status,
+      })
+      .select()
+      .single();
+    if (error || !data) return null;
+    return mapDebtClient(data);
+  } catch {
+    return null;
+  }
+}
+
+export async function updateDebtClientStatus(id: string, status: DebtClient['status']): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('debt_clients')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteDebtClient(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('debt_clients').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 export async function upsertCompanySettings(userId: string, settings: Partial<CompanySettings>): Promise<CompanySettings | null> {

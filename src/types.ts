@@ -157,3 +157,13 @@ export interface ToastMessage {
   descriptionPt: string;
   type: 'success' | 'error' | 'info';
 }
+
+export interface DebtClient {
+  id: string;
+  fullName: string;
+  movitelNumber: string;
+  vodacomNumber: string;
+  address: string;
+  status: 'Pendente' | 'Liquidado';
+  createdAt?: string;
+}

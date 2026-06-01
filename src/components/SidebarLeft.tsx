@@ -51,9 +51,9 @@ export default function SidebarLeft({
   return (
     <aside className="fixed bottom-4 left-4 z-40 rounded-2xl border border-slate-700/60 bg-slate-900/95 p-2 shadow-2xl shadow-slate-950/30 backdrop-blur-xl">
       <nav className="flex items-center gap-1.5">
-        <div className="mr-1 flex items-center gap-2 rounded-xl bg-slate-800/90 px-2 py-1.5">
+        <div className="mr-1 flex items-center gap-2 rounded-xl bg-slate-800/90 px-3 self-stretch">
           <div
-            className="h-9 w-9 rounded-full bg-secondary flex items-center justify-center font-black text-white text-sm shadow-sm"
+            className="h-7 w-7 rounded-full bg-secondary flex items-center justify-center font-black text-white text-xs shadow-sm"
             title={userName || 'User'}
           >
             {initials}
