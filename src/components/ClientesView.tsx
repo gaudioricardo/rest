@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { DebtClient, Language } from '../types';
 import {
-  UserRound, Plus, MapPin, Phone, MessageSquare,
+  UserRound, Plus, MapPin, Phone, Mail, MessageSquare,
   CheckCircle2, Clock, Trash2, Send, ChevronRight, X,
 } from 'lucide-react';
 
@@ -86,7 +86,8 @@ export default function ClientesView({
     c.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.movitelNumber.includes(searchQuery) ||
-    c.vodacomNumber.includes(searchQuery)
+    c.vodacomNumber.includes(searchQuery) ||
+    (c.email ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const pendentes = filtered.filter(c => c.status === 'Pendente');
@@ -230,6 +231,13 @@ export default function ClientesView({
                     <span className="w-14 font-bold text-[9px] uppercase tracking-wider text-slate-400">Vodacom</span>
                     <Phone size={11} className="text-red-400" />
                     <span className="font-mono">{client.vodacomNumber}</span>
+                  </div>
+                )}
+                {client.email && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-14 font-bold text-[9px] uppercase tracking-wider text-slate-400">Email</span>
+                    <Mail size={11} className="text-slate-400" />
+                    <span className="truncate">{client.email}</span>
                   </div>
                 )}
                 {client.address && (

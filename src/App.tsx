@@ -50,8 +50,9 @@ export default function App() {
   // Always Metical (MZN/MT)
   const currency: Currency = 'MZN';
 
-  // Disabled dark mode (defaults to clean light theme)
-  const darkMode = false;
+  const [darkMode, setDarkMode] = useState<boolean>(
+    () => localStorage.getItem('invstock_dark') === 'true'
+  );
 
   const [activeTab, setActiveTab] = useState<string>(() => {
     return localStorage.getItem('invstock_tab') || 'dashboard';
@@ -85,6 +86,8 @@ export default function App() {
   // Form state – Invoice
   const [formInvoiceClient, setFormInvoiceClient] = useState('');
   const [formInvoiceClientNuit, setFormInvoiceClientNuit] = useState('');
+  const [formInvoiceClientPhone, setFormInvoiceClientPhone] = useState('');
+  const [formInvoiceClientEmail, setFormInvoiceClientEmail] = useState('');
   const [formInvoiceStatus, setFormInvoiceStatus] = useState<Invoice['status']>('Pending');
   const [formInvoiceDescription, setFormInvoiceDescription] = useState('');
   const [formInvoiceDueDate, setFormInvoiceDueDate] = useState('');
@@ -104,6 +107,8 @@ export default function App() {
   // Form state – Quote
   const [formQuoteClient, setFormQuoteClient] = useState('');
   const [formQuoteClientNuit, setFormQuoteClientNuit] = useState('');
+  const [formQuoteClientPhone, setFormQuoteClientPhone] = useState('');
+  const [formQuoteClientEmail, setFormQuoteClientEmail] = useState('');
   const [formQuoteDescription, setFormQuoteDescription] = useState('');
   const [formQuoteValidity, setFormQuoteValidity] = useState('15');
   const [formQuoteItems, setFormQuoteItems] = useState<DocumentItem[]>([
@@ -130,6 +135,21 @@ export default function App() {
   const [formClientVodacom, setFormClientVodacom] = useState('');
   const [formClientAddress, setFormClientAddress] = useState('');
   const [formClientStatus, setFormClientStatus] = useState<DebtClient['status']>('Pendente');
+
+  // Form state – Receipt (manual)
+  const [formReceiptClient, setFormReceiptClient] = useState('');
+  const [formReceiptAmount, setFormReceiptAmount] = useState('');
+  const [formReceiptMethod, setFormReceiptMethod] = useState('Bank Transfer');
+  const [formReceiptInvoiceRef, setFormReceiptInvoiceRef] = useState('');
+  const [formReceiptDate, setFormReceiptDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // Form state – company profile & notes (shared across document modals)
+  const [formInvoiceCompanyProfile, setFormInvoiceCompanyProfile] = useState<'primary' | 'secondary'>('primary');
+  const [formInvoiceNotes, setFormInvoiceNotes] = useState('');
+  const [formQuoteCompanyProfile, setFormQuoteCompanyProfile] = useState<'primary' | 'secondary'>('primary');
+  const [formQuoteNotes, setFormQuoteNotes] = useState('');
+  const [formReceiptCompanyProfile, setFormReceiptCompanyProfile] = useState<'primary' | 'secondary'>('primary');
+  const [formReceiptNotes, setFormReceiptNotes] = useState('');
 
   const [reportProgress, setReportProgress] = useState(0);
 
@@ -272,6 +292,7 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(() => {
+    localStorage.setItem('invstock_dark', darkMode ? 'true' : 'false');
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -323,7 +344,13 @@ export default function App() {
     if (updated) setCompanySettings(updated);
   };
 
-  const handleGenerateModel = () => {
+  const handleDeleteSecondaryCompany = async () => {
+    if (!currentUserId) return;
+    const updated = await db.upsertCompanySettings(currentUserId, { secondaryCompany: null });
+    if (updated) setCompanySettings(updated);
+  };
+
+  const handleGenerateModel = async () => {
     const today = new Date().toISOString().slice(0, 10);
     const sampleInvoice: Invoice = {
       id: 'sample',
@@ -343,7 +370,7 @@ export default function App() {
       { description: 'Serviço de consultoria ERP', quantity: 1, unitPrice: 30000 },
       { description: 'Licença anual de software', quantity: 1, unitPrice: 20000 },
     ];
-    generateInvoicePDF(sampleInvoice, sampleItems, companySettings);
+    await generateInvoicePDF(sampleInvoice, sampleItems, companySettings);
   };
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
@@ -388,30 +415,65 @@ export default function App() {
       userId: currentUserId,
       client: formInvoiceClient.trim(),
       clientNuit: formInvoiceClientNuit.trim() || undefined,
+      clientPhone: formInvoiceClientPhone.trim() || undefined,
+      clientEmail: formInvoiceClientEmail.trim() || undefined,
       description: formInvoiceDescription.trim() || undefined,
       amount: amt,
       status: formInvoiceStatus,
       issueDate: today,
       dueDate: formInvoiceDueDate || defaultDue,
       logoBg: 'bg-emerald-50 text-emerald-800 border border-emerald-500',
+      companyProfileId: formInvoiceCompanyProfile,
+      notes: formInvoiceNotes.trim() || undefined,
     });
 
     if (newInv) {
-      // Save line items
       const validItems = formInvoiceItems.filter(it => it.description.trim());
       if (validItems.length > 0) {
         await db.createInvoiceItems(newInv.id, validItems);
       }
 
+      // Auto-register client in the clients list
+      const upserted = await db.upsertDebtClientFromDocument(currentUserId, {
+        fullName: formInvoiceClient.trim(),
+        phone: formInvoiceClientPhone.trim() || undefined,
+        email: formInvoiceClientEmail.trim() || undefined,
+      });
+      if (upserted) {
+        setDebtClients(prev => {
+          const exists = prev.find(c => c.id === upserted.id);
+          return exists ? prev.map(c => c.id === upserted.id ? upserted : c) : [upserted, ...prev];
+        });
+      }
+
       setInvoices(prev => [newInv, ...prev]);
       setTransactions(prev => [invoicesToTransactions([newInv])[0], ...prev]);
+
+      // Cotações pendentes do cliente passam automaticamente para "Aprovado"
+      const clientLower = formInvoiceClient.trim().toLowerCase();
+      const pendingQuoteIds = quotes
+        .filter(q => q.client.toLowerCase() === clientLower && q.status === 'Pending')
+        .map(q => q.id);
+      if (pendingQuoteIds.length > 0) {
+        await Promise.all(pendingQuoteIds.map(id => db.updateQuoteStatus(id, 'Approved')));
+        setQuotes(prev => prev.map(q =>
+          pendingQuoteIds.includes(q.id)
+            ? { ...q, status: 'Approved' as const, statusPt: 'Aprovado' as const }
+            : q
+        ));
+      }
+
       setActiveModal(null);
       setFormInvoiceClient('');
       setFormInvoiceClientNuit('');
+      setFormInvoiceClientPhone('');
+      setFormInvoiceClientEmail('');
       setFormInvoiceStatus('Pending');
       setFormInvoiceDescription('');
       setFormInvoiceDueDate('');
       setFormInvoiceItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+      setFormInvoiceCompanyProfile('primary');
+      setFormInvoiceNotes('');
       triggerToast(
         'Invoice Ledger Updated',
         'Razão de Facturação Actualizado',
@@ -452,6 +514,7 @@ export default function App() {
       method: paymentMethod,
       methodPt: methodPtMap[paymentMethod] ?? paymentMethod,
       paymentDate: today,
+      companyProfileId: inv.companyProfileId,
     });
 
     setInvoices(prev => prev.map(i => i.id === invoiceId
@@ -464,6 +527,20 @@ export default function App() {
     ));
     if (newReceipt) {
       setReceipts(prev => [newReceipt, ...prev]);
+    }
+
+    // Settle associated quotes and client automatically
+    const settledQuoteIds = await db.settleQuotesByClientName(currentUserId, inv.client);
+    if (settledQuoteIds.length > 0) {
+      setQuotes(prev => prev.map(q =>
+        settledQuoteIds.includes(q.id)
+          ? { ...q, status: 'Liquidado' as const, statusPt: 'Liquidado' as const }
+          : q
+      ));
+    }
+    const settledClient = await db.settleDebtClientByName(currentUserId, inv.client);
+    if (settledClient) {
+      setDebtClients(prev => prev.map(c => c.id === settledClient.id ? settledClient : c));
     }
 
     triggerToast(
@@ -572,11 +649,15 @@ export default function App() {
       userId: currentUserId,
       client: formQuoteClient.trim(),
       clientNuit: formQuoteClientNuit.trim() || undefined,
+      clientPhone: formQuoteClientPhone.trim() || undefined,
+      clientEmail: formQuoteClientEmail.trim() || undefined,
       description: formQuoteDescription.trim() || undefined,
       amount: amt,
       issueDate: today,
       validityDays: parseInt(formQuoteValidity) || 15,
       logoBg: 'bg-amber-100 text-amber-800',
+      companyProfileId: formQuoteCompanyProfile,
+      notes: formQuoteNotes.trim() || undefined,
     });
 
     if (newQt) {
@@ -585,13 +666,30 @@ export default function App() {
         await db.createQuoteItems(newQt.id, validItems);
       }
 
+      // Auto-register client in the clients list
+      const upserted = await db.upsertDebtClientFromDocument(currentUserId, {
+        fullName: formQuoteClient.trim(),
+        phone: formQuoteClientPhone.trim() || undefined,
+        email: formQuoteClientEmail.trim() || undefined,
+      });
+      if (upserted) {
+        setDebtClients(prev => {
+          const exists = prev.find(c => c.id === upserted.id);
+          return exists ? prev.map(c => c.id === upserted.id ? upserted : c) : [upserted, ...prev];
+        });
+      }
+
       setQuotes(prev => [newQt, ...prev]);
       setActiveModal(null);
       setFormQuoteClient('');
       setFormQuoteClientNuit('');
+      setFormQuoteClientPhone('');
+      setFormQuoteClientEmail('');
       setFormQuoteDescription('');
       setFormQuoteValidity('15');
       setFormQuoteItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+      setFormQuoteCompanyProfile('primary');
+      setFormQuoteNotes('');
       triggerToast(
         'Simulation proposal launched',
         'Proposta simulada',
@@ -746,6 +844,89 @@ export default function App() {
     }
   };
 
+  const handleCreateReceiptManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formReceiptClient.trim() || !formReceiptAmount.trim()) {
+      triggerToast('Validation Error', 'Erro de Validação', 'Fill required fields.', 'Preencha os campos obrigatórios.', 'error');
+      return;
+    }
+    const amt = parseFloat(formReceiptAmount);
+    if (isNaN(amt) || amt <= 0) return;
+    if (!currentUserId) return;
+
+    const methodPtMap: Record<string, string> = {
+      'Bank Transfer': 'Transferência Bancária',
+      'M-Pesa': 'M-Pesa',
+      'E-Mola': 'E-Mola',
+      'Cash': 'Dinheiro',
+    };
+
+    const newReceipt = await db.createReceipt({
+      userId: currentUserId,
+      invoiceRef: formReceiptInvoiceRef.trim() || '—',
+      client: formReceiptClient.trim(),
+      amount: amt,
+      method: formReceiptMethod,
+      methodPt: methodPtMap[formReceiptMethod] ?? formReceiptMethod,
+      paymentDate: formReceiptDate,
+      companyProfileId: formReceiptCompanyProfile,
+      notes: formReceiptNotes.trim() || undefined,
+    });
+
+    if (newReceipt) {
+      setReceipts(prev => [newReceipt, ...prev]);
+
+      // Factura referenciada passa automaticamente para "Pago"
+      const invoiceRef = formReceiptInvoiceRef.trim();
+      if (invoiceRef && invoiceRef !== '—') {
+        const linkedInv = invoices.find(i => i.invoiceNumber === invoiceRef && i.status !== 'Paid');
+        if (linkedInv) {
+          const okPay = await db.updateInvoiceStatus(linkedInv.id, 'Paid');
+          if (okPay) {
+            setInvoices(prev => prev.map(i =>
+              i.id === linkedInv.id ? { ...i, status: 'Paid' as const, statusPt: 'Pago' as const } : i
+            ));
+            setTransactions(prev => prev.map(t =>
+              t.id === linkedInv.id + '-tx' ? { ...t, status: 'Paid' as const, statusPt: 'Pago' as const } : t
+            ));
+          }
+        }
+      }
+
+      // Cascade: cotações e cliente passam para "Liquidado"
+      const settledIds = await db.settleQuotesByClientName(currentUserId, formReceiptClient.trim());
+      if (settledIds.length > 0) {
+        setQuotes(prev => prev.map(q =>
+          settledIds.includes(q.id)
+            ? { ...q, status: 'Liquidado' as const, statusPt: 'Liquidado' as const }
+            : q
+        ));
+      }
+      const settledClient = await db.settleDebtClientByName(currentUserId, formReceiptClient.trim());
+      if (settledClient) {
+        setDebtClients(prev => prev.map(c => c.id === settledClient.id ? settledClient : c));
+      }
+
+      setActiveModal(null);
+      setFormReceiptClient('');
+      setFormReceiptAmount('');
+      setFormReceiptInvoiceRef('');
+      setFormReceiptDate(new Date().toISOString().slice(0, 10));
+      setFormReceiptMethod('Bank Transfer');
+      setFormReceiptCompanyProfile('primary');
+      setFormReceiptNotes('');
+      triggerToast(
+        'Receipt Issued — Invoice Settled',
+        'Recibo Emitido — Factura Liquidada',
+        `Receipt ${newReceipt.receiptNumber} issued. Linked invoice marked as paid.`,
+        `Recibo ${newReceipt.receiptNumber} emitido. Factura vinculada marcada como paga.`,
+        'success'
+      );
+    } else {
+      triggerToast('Error', 'Erro', 'Failed to create receipt.', 'Falha ao criar recibo.', 'error');
+    }
+  };
+
   // PDF Report generation
   const handleTriggerReportGeneration = () => {
     setActiveModal('generate_report');
@@ -777,9 +958,9 @@ export default function App() {
   // Mostra enquanto loading OU 3.5s ainda não passaram — o que durar mais
   if (loading || showPreloader) {
     return (
-      <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center gap-7">
+      <div className="fixed inset-0 z-[9999] bg-white dark:bg-slate-950 flex flex-col items-center justify-center gap-7">
         <img src={logoUrl} alt="Logo" className="w-28 h-28 object-contain select-none" />
-        <p className="font-playfair text-slate-700 text-xl italic font-normal tracking-wide">
+        <p className="font-playfair text-slate-700 dark:text-slate-300 text-xl italic font-normal tracking-wide">
           Were growth finds space
         </p>
         <div className="flex items-end gap-2">
@@ -817,7 +998,7 @@ export default function App() {
 
   // ─── Main App ──────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-100 font-sans antialiased text-slate-800 transition-colors">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 font-sans antialiased text-slate-800 dark:text-slate-100 transition-colors">
       <div className="flex min-h-screen">
 
         {/* Left Sidebar */}
@@ -859,6 +1040,8 @@ export default function App() {
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             onNewInvoice={() => setActiveModal('new_invoice')}
+            onNewQuote={() => setActiveModal('new_proposal')}
+            onNewReceipt={() => setActiveModal('new_receipt')}
             onGenerateReport={handleTriggerReportGeneration}
             onNewItem={() => setActiveModal('add_item')}
             activeTab={activeTab}
@@ -928,6 +1111,7 @@ export default function App() {
             {activeTab === 'receipts' && (
               <ReceiptsView
                 receipts={receipts}
+                quotes={quotes}
                 language={language}
                 currency={currency}
                 searchQuery={searchQuery}
@@ -985,6 +1169,10 @@ export default function App() {
                 onComplete={() => {}}
                 isFirstSetup={false}
                 onGenerateModel={handleGenerateModel}
+                userId={currentUserId ?? undefined}
+                darkMode={darkMode}
+                onToggleDarkMode={() => setDarkMode(prev => !prev)}
+                onDeleteSecondaryCompany={handleDeleteSecondaryCompany}
               />
             )}
 
@@ -1060,6 +1248,9 @@ export default function App() {
           onComplete={() => setCompanySettings(prev => ({ ...prev, setupComplete: true }))}
           isFirstSetup={true}
           onGenerateModel={handleGenerateModel}
+          userId={currentUserId ?? undefined}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(prev => !prev)}
         />
       )}
 
@@ -1115,6 +1306,7 @@ export default function App() {
                 {activeModal === 'new_contact' && (language === 'en' ? 'Register New Business Contact' : 'Adicionar Contacto a Directório')}
                 {activeModal === 'generate_report' && (language === 'en' ? 'Consolidating Financial Aggregates' : 'Consolidando Relatórios Globais')}
                 {activeModal === 'new_debt_client' && (language === 'en' ? 'Add Pending Client' : 'Adicionar Cliente Pendente')}
+                {activeModal === 'new_receipt' && (language === 'en' ? 'Issue New Receipt' : 'Emitir Novo Recibo')}
               </h3>
 
               {activeModal !== 'generate_report' && (
@@ -1156,6 +1348,29 @@ export default function App() {
                     />
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Client Phone (optional)' : 'Telefone do Cliente (opcional)'}</label>
+                      <input
+                        type="tel"
+                        value={formInvoiceClientPhone}
+                        onChange={(e) => setFormInvoiceClientPhone(e.target.value)}
+                        placeholder="+258 84 000 0000"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Client Email (optional)' : 'Email do Cliente (opcional)'}</label>
+                      <input
+                        type="email"
+                        value={formInvoiceClientEmail}
+                        onChange={(e) => setFormInvoiceClientEmail(e.target.value)}
+                        placeholder="cliente@empresa.co.mz"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Initial Billing Status' : 'Estado de Liquidação'}</label>
                     <select
@@ -1168,6 +1383,31 @@ export default function App() {
                       <option value="Overdue">{language === 'en' ? 'Overdue debt' : 'Vencido'}</option>
                     </select>
                   </div>
+
+                  {/* Company selector — only when secondary company exists */}
+                  {companySettings.secondaryCompany && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Issuing Company' : 'Empresa Emissora'}</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setFormInvoiceCompanyProfile('primary')}
+                          className={`p-2.5 rounded-lg border text-xs font-semibold transition-all truncate ${
+                            formInvoiceCompanyProfile === 'primary'
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-400'
+                          }`}>
+                          {companySettings.companyName || (language === 'en' ? 'Primary' : 'Principal')}
+                        </button>
+                        <button type="button" onClick={() => setFormInvoiceCompanyProfile('secondary')}
+                          className={`p-2.5 rounded-lg border text-xs font-semibold transition-all truncate ${
+                            formInvoiceCompanyProfile === 'secondary'
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-400'
+                          }`}>
+                          {companySettings.secondaryCompany.companyName || (language === 'en' ? 'Secondary' : 'Secundária')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Service / Product Description' : 'Descrição do Serviço / Produto'}</label>
@@ -1269,6 +1509,17 @@ export default function App() {
                       value={formInvoiceDueDate}
                       onChange={(e) => setFormInvoiceDueDate(e.target.value)}
                       className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Document Notes (optional)' : 'Observações do Documento (opcional)'}</label>
+                    <textarea
+                      value={formInvoiceNotes}
+                      onChange={(e) => setFormInvoiceNotes(e.target.value)}
+                      rows={2}
+                      placeholder={language === 'en' ? 'Payment terms, special conditions...' : 'Condições de pagamento, observações especiais...'}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 resize-none"
                     />
                   </div>
 
@@ -1430,6 +1681,54 @@ export default function App() {
                     />
                   </div>
 
+                  {/* Company selector — only when secondary company exists */}
+                  {companySettings.secondaryCompany && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Issuing Company' : 'Empresa Emissora'}</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setFormQuoteCompanyProfile('primary')}
+                          className={`p-2.5 rounded-lg border text-xs font-semibold transition-all truncate ${
+                            formQuoteCompanyProfile === 'primary'
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-400'
+                          }`}>
+                          {companySettings.companyName || (language === 'en' ? 'Primary' : 'Principal')}
+                        </button>
+                        <button type="button" onClick={() => setFormQuoteCompanyProfile('secondary')}
+                          className={`p-2.5 rounded-lg border text-xs font-semibold transition-all truncate ${
+                            formQuoteCompanyProfile === 'secondary'
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-blue-400'
+                          }`}>
+                          {companySettings.secondaryCompany.companyName || (language === 'en' ? 'Secondary' : 'Secundária')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Client Phone (optional)' : 'Telefone do Cliente (opcional)'}</label>
+                      <input
+                        type="tel"
+                        value={formQuoteClientPhone}
+                        onChange={(e) => setFormQuoteClientPhone(e.target.value)}
+                        placeholder="+258 84 000 0000"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Client Email (optional)' : 'Email do Cliente (opcional)'}</label>
+                      <input
+                        type="email"
+                        value={formQuoteClientEmail}
+                        onChange={(e) => setFormQuoteClientEmail(e.target.value)}
+                        placeholder="cliente@empresa.co.mz"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Service Description' : 'Descrição do Serviço'}</label>
                     <textarea
@@ -1532,6 +1831,17 @@ export default function App() {
                       onChange={(e) => setFormQuoteValidity(e.target.value)}
                       placeholder="15"
                       className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Document Notes (optional)' : 'Observações do Documento (opcional)'}</label>
+                    <textarea
+                      value={formQuoteNotes}
+                      onChange={(e) => setFormQuoteNotes(e.target.value)}
+                      rows={2}
+                      placeholder={language === 'en' ? 'Terms, special conditions, notes...' : 'Condições, observações especiais...'}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200 resize-none outline-none focus:border-blue-500"
                     />
                   </div>
 
@@ -1802,6 +2112,173 @@ export default function App() {
                       className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-md cursor-pointer"
                     >
                       {language === 'en' ? 'Add Client' : 'Adicionar Cliente'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* H. New Receipt (manual) Form */}
+              {activeModal === 'new_receipt' && (
+                <form onSubmit={handleCreateReceiptManual} className="space-y-4">
+
+                  {/* 1. Invoice selector — first field, autofills everything below */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      {language === 'en' ? 'Invoice Reference' : 'Referência da Factura'}
+                    </label>
+                    <select
+                      value={formReceiptInvoiceRef}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setFormReceiptInvoiceRef(val);
+                        if (val) {
+                          const inv = invoices.find(i => i.invoiceNumber === val);
+                          if (inv) {
+                            setFormReceiptClient(inv.client);
+                            setFormReceiptAmount(String(inv.amount));
+                            if (inv.companyProfileId) setFormReceiptCompanyProfile(inv.companyProfileId);
+                          }
+                        } else {
+                          setFormReceiptClient('');
+                          setFormReceiptAmount('');
+                        }
+                      }}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100 font-semibold cursor-pointer"
+                    >
+                      <option value="">
+                        {language === 'en' ? '— Select a pending invoice —' : '— Selecionar factura pendente —'}
+                      </option>
+                      {invoices.filter(i => i.status !== 'Paid').map(i => (
+                        <option key={i.id} value={i.invoiceNumber}>
+                          {i.invoiceNumber} · {i.client} · {formatValue(i.amount, 'MZN')}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400 leading-tight">
+                      {language === 'en'
+                        ? 'Selecting an invoice auto-fills the client and amount below.'
+                        : 'Selecionar uma factura preenche automaticamente o cliente e o valor.'}
+                    </p>
+                  </div>
+
+                  {/* 2. Client Name (autofilled from invoice, editable) */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      {language === 'en' ? 'Client Name *' : 'Nome do Cliente *'}
+                      {formReceiptClient && formReceiptInvoiceRef && (
+                        <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                          {language === 'en' ? 'auto-filled' : 'preenchido'}
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formReceiptClient}
+                      onChange={e => setFormReceiptClient(e.target.value)}
+                      placeholder="TechSolutions S.A."
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  {/* 3. Amount + Date */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        {language === 'en' ? 'Amount (MZN) *' : 'Valor (MZN) *'}
+                        {formReceiptAmount && formReceiptInvoiceRef && (
+                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                            {language === 'en' ? 'auto' : 'auto'}
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0.01"
+                        step="any"
+                        value={formReceiptAmount}
+                        onChange={e => setFormReceiptAmount(e.target.value)}
+                        placeholder="85000.00"
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Payment Date' : 'Data de Pagamento'}</label>
+                      <input
+                        type="date"
+                        value={formReceiptDate}
+                        onChange={e => setFormReceiptDate(e.target.value)}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 4. Payment Method */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Payment Method' : 'Método de Pagamento'}</label>
+                    <select
+                      value={formReceiptMethod}
+                      onChange={e => setFormReceiptMethod(e.target.value)}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
+                    >
+                      <option value="Bank Transfer">{language === 'en' ? 'Bank Transfer' : 'Transferência Bancária'}</option>
+                      <option value="M-Pesa">M-Pesa</option>
+                      <option value="E-Mola">E-Mola</option>
+                      <option value="Cash">{language === 'en' ? 'Cash' : 'Numerário'}</option>
+                    </select>
+                  </div>
+
+                  {/* 5. Company selector — only when secondary company exists */}
+                  {companySettings.secondaryCompany && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Issuing Company' : 'Empresa Emissora'}</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setFormReceiptCompanyProfile('primary')}
+                          className={`p-2.5 rounded-lg border text-xs font-semibold transition-all truncate ${
+                            formReceiptCompanyProfile === 'primary'
+                              ? 'bg-emerald-600 border-emerald-600 text-white'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-400'
+                          }`}>
+                          {companySettings.companyName || (language === 'en' ? 'Primary' : 'Principal')}
+                        </button>
+                        <button type="button" onClick={() => setFormReceiptCompanyProfile('secondary')}
+                          className={`p-2.5 rounded-lg border text-xs font-semibold transition-all truncate ${
+                            formReceiptCompanyProfile === 'secondary'
+                              ? 'bg-emerald-600 border-emerald-600 text-white'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-400'
+                          }`}>
+                          {companySettings.secondaryCompany.companyName || (language === 'en' ? 'Secondary' : 'Secundária')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 6. Notes */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Document Notes (optional)' : 'Observações do Documento (opcional)'}</label>
+                    <textarea
+                      value={formReceiptNotes}
+                      onChange={e => setFormReceiptNotes(e.target.value)}
+                      rows={2}
+                      placeholder={language === 'en' ? 'Payment notes, observations...' : 'Notas de pagamento, observações...'}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100 resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-500 font-semibold text-xs rounded-lg transition-all cursor-pointer"
+                    >
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg shadow-md transition-all cursor-pointer"
+                    >
+                      {language === 'en' ? 'Issue Receipt' : 'Emitir Recibo'}
                     </button>
                   </div>
                 </form>

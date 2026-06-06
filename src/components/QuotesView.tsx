@@ -8,7 +8,7 @@ import { Quote, Language, Currency, CompanySettings } from '../types';
 import { formatValue } from '../data';
 import { FileCode, Plus, Search, HelpCircle, Check, X, ClipboardSignature, Eye, Download } from 'lucide-react';
 import * as db from '../lib/db';
-import { generateQuotePDF } from '../lib/pdf';
+import { generateQuotePDF, resolveCompanySettings } from '../lib/pdf';
 
 interface QuotesViewProps {
   quotes: Quote[];
@@ -41,9 +41,10 @@ export default function QuotesView({
       companyName: '', nuit: '', address: '', city: '',
       phone: '', email: '', bankAccounts: [], mobileContacts: [], setupComplete: false,
     };
-    const settings = companySettings || defaultSettings;
+    const base = companySettings || defaultSettings;
+    const settings = resolveCompanySettings(base, q.companyProfileId);
     const items = await db.fetchQuoteItems(q.id);
-    generateQuotePDF(q, items, settings);
+    await generateQuotePDF(q, items, settings);
   };
 
   const now = new Date();
@@ -134,7 +135,7 @@ export default function QuotesView({
                       <td className="px-6 py-4 text-xs font-semibold text-primary dark:text-slate-300 uppercase tracking-tight font-display">{q.client}</td>
                       <td className="px-6 py-4 text-xs text-slate-500">{language === 'en' ? q.date : q.datePt}</td>
                       <td className="px-6 py-4 text-xs font-mono font-bold text-slate-800 dark:text-slate-200">{formatValue(q.amount, currency)}</td>
-                      <td className="px-6 py-4"><span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider ${q.status === 'Approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' : q.status === 'Pending' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-red-100 text-red-800 dark:bg-red-955/40 dark:text-red-300'}`}>{language === 'en' ? q.status : q.statusPt}</span></td>
+                      <td className="px-6 py-4"><span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider ${q.status === 'Approved' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' : q.status === 'Pending' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : q.status === 'Liquidado' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300' : 'bg-red-100 text-red-800 dark:bg-red-955/40 dark:text-red-300'}`}>{language === 'en' ? q.status : q.statusPt}</span></td>
                       <td className="px-6 py-3 text-right flex items-center justify-end gap-1.5 h-14">
                         {q.status === 'Pending' && (<button onClick={(e) => { e.stopPropagation(); handleApproveQuote(q.id, q.quoteNumber); }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[9px] uppercase px-3 py-1.5 rounded inline-flex items-center gap-1 shadow-xs transition-smooth cursor-pointer"><Check size={11} /><span>{language === 'en' ? 'Approve' : 'Aprovar'}</span></button>)}
                         <button onClick={(e) => { e.stopPropagation(); setSelectedQuote(q); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded inline-block transition-smooth cursor-pointer" title={language === 'en' ? 'Open details' : 'Abrir detalhes'}><Eye size={14} /></button>

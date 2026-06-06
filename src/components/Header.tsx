@@ -4,15 +4,18 @@
  */
 
 import { useState } from 'react';
-import { Search, Settings, FileDown, Plus } from 'lucide-react';
+import { Search, Settings, FileDown, Plus, FileText, Receipt } from 'lucide-react';
 import { Language } from '../types';
 import logoExtended from '../assets/Logo_extended.webp';
+import logoExtendedDark from '../assets/logo_extended_darkmode.webp';
 
 interface HeaderProps {
   language: Language;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onNewInvoice: () => void;
+  onNewQuote: () => void;
+  onNewReceipt: () => void;
   onGenerateReport: () => void;
   onNewItem?: () => void;
   activeTab: string;
@@ -44,6 +47,8 @@ export default function Header({
   searchQuery,
   setSearchQuery,
   onNewInvoice,
+  onNewQuote,
+  onNewReceipt,
   onGenerateReport,
   onNewItem,
   activeTab,
@@ -106,7 +111,12 @@ export default function Header({
       <img
         src={logoExtended}
         alt="Logo"
-        className="h-8 object-contain mr-6 flex-shrink-0 select-none"
+        className="h-8 object-contain mr-6 flex-shrink-0 select-none dark:hidden"
+      />
+      <img
+        src={logoExtendedDark}
+        alt="Logo"
+        className="h-8 object-contain mr-6 flex-shrink-0 select-none hidden dark:block"
       />
 
       {/* Search Input block (Expanded/Contextualized) */}
@@ -128,23 +138,45 @@ export default function Header({
       {/* Main Right Tools Header */}
       <div className="flex items-center gap-4">
 
-        {/* Quick Action Buttons */}
-        <div className="hidden lg:flex gap-3">
+        {/* Quick Action Buttons — contextual per tab */}
+        <div className="hidden lg:flex gap-2">
           <button
             onClick={onGenerateReport}
-            className="px-4 py-2 bg-secondary hover:bg-secondary/90 text-white font-medium text-xs rounded flex items-center gap-2 transition-smooth cursor-pointer shadow-sm active:scale-98"
+            className="px-3.5 py-2 bg-secondary hover:bg-secondary/90 text-white font-medium text-xs rounded flex items-center gap-1.5 transition-smooth cursor-pointer shadow-sm active:scale-98"
           >
-            <FileDown size={14} />
-            <span>{language === 'en' ? 'Generate Report' : 'Gerar Relatório'}</span>
+            <FileDown size={13} />
+            <span>{language === 'en' ? 'Report' : 'Relatório'}</span>
           </button>
 
-          <button
-            onClick={onNewInvoice}
-            className="px-4 py-2 bg-primary text-white hover:bg-primary-container font-semibold text-xs rounded flex items-center gap-2 transition-smooth cursor-pointer shadow-sm active:scale-98 border border-primary/10"
-          >
-            <Plus size={14} />
-            <span>{language === 'en' ? 'New Invoice' : 'Nova Factura'}</span>
-          </button>
+          {activeTab === 'quotes' ? (
+            <button
+              onClick={onNewQuote}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded flex items-center gap-1.5 transition-smooth cursor-pointer shadow-sm active:scale-98"
+            >
+              <FileText size={13} />
+              <span>{language === 'en' ? 'New Quote' : 'Nova Cotação'}</span>
+            </button>
+          ) : activeTab === 'receipts' ? (
+            <button
+              onClick={onNewReceipt}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded flex items-center gap-1.5 transition-smooth cursor-pointer shadow-sm active:scale-98"
+            >
+              <Receipt size={13} />
+              <span>{language === 'en' ? 'New Receipt' : 'Novo Recibo'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={activeTab === 'stock' ? onNewItem : onNewInvoice}
+              className="px-3.5 py-2 bg-primary text-white hover:bg-primary-container font-semibold text-xs rounded flex items-center gap-1.5 transition-smooth cursor-pointer shadow-sm active:scale-98 border border-primary/10"
+            >
+              <Plus size={13} />
+              <span>
+                {activeTab === 'stock'
+                  ? (language === 'en' ? 'Add Item' : 'Adicionar Item')
+                  : (language === 'en' ? 'New Invoice' : 'Nova Factura')}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Separator */}
@@ -193,18 +225,7 @@ export default function Header({
               >
                 {language === 'en' ? 'My Profile / Settings' : 'Perfil / Definições'}
               </button>
-              <button
-                onClick={() => { setShowProfileMenu(false); }}
-                className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-750 dark:text-slate-300 transition-smooth"
-              >
-                {language === 'en' ? 'Security logs' : 'Logs de Segurança'}
-              </button>
-              <button
-                onClick={() => { setShowProfileMenu(false); }}
-                className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-750 dark:text-slate-300 transition-smooth"
-              >
-                {language === 'en' ? 'Server Status' : 'Estado do Servidor'}
-              </button>
+              
             </div>
           )}
         </div>

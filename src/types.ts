@@ -38,6 +38,8 @@ export interface Invoice {
   invoiceNumber: string;       // formatted: "INV-0001"
   client: string;
   clientNuit?: string;
+  clientPhone?: string;
+  clientEmail?: string;
   description?: string;        // service/product description
   initials: string;
   issueDate: string;           // ISO date "2026-05-29"
@@ -49,6 +51,8 @@ export interface Invoice {
   statusPt: 'Pago' | 'Pendente' | 'Vencido';
   logoBg: string;
   items?: DocumentItem[];
+  companyProfileId?: 'primary' | 'secondary';
+  notes?: string;
 }
 
 export interface Quote {
@@ -57,6 +61,8 @@ export interface Quote {
   quoteNumber: string;         // formatted: "QT-0001"
   client: string;
   clientNuit?: string;
+  clientPhone?: string;
+  clientEmail?: string;
   description?: string;
   initials: string;
   issueDate: string;
@@ -64,10 +70,12 @@ export interface Quote {
   date: string;
   datePt: string;
   amount: number;
-  status: 'Approved' | 'Pending' | 'Rejected';
-  statusPt: 'Aprovado' | 'Pendente' | 'Rejeitado';
+  status: 'Approved' | 'Pending' | 'Rejected' | 'Liquidado';
+  statusPt: 'Aprovado' | 'Pendente' | 'Rejeitado' | 'Liquidado';
   logoBg: string;
   items?: DocumentItem[];
+  companyProfileId?: 'primary' | 'secondary';
+  notes?: string;
 }
 
 export interface Receipt {
@@ -84,6 +92,8 @@ export interface Receipt {
   method: string;
   methodPt: string;
   invoiceRef: string;          // invoice number string
+  companyProfileId?: 'primary' | 'secondary';
+  notes?: string;
 }
 
 export interface Expense {
@@ -133,6 +143,19 @@ export interface MobileContact {
   number: string;
 }
 
+export interface SecondaryCompany {
+  companyName: string;
+  nuit: string;
+  address: string;
+  city: string;
+  phone: string;
+  email: string;
+  logoBase64?: string;
+  stampBase64?: string;
+  bankAccounts: BankAccount[];
+  mobileContacts: MobileContact[];
+}
+
 export interface CompanySettings {
   id?: string;
   userId?: string;
@@ -147,6 +170,7 @@ export interface CompanySettings {
   bankAccounts: BankAccount[];
   mobileContacts: MobileContact[];
   setupComplete: boolean;
+  secondaryCompany?: SecondaryCompany | null;
 }
 
 export interface ToastMessage {
@@ -163,6 +187,7 @@ export interface DebtClient {
   fullName: string;
   movitelNumber: string;
   vodacomNumber: string;
+  email?: string;
   address: string;
   status: 'Pendente' | 'Liquidado';
   createdAt?: string;

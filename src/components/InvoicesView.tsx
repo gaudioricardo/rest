@@ -25,7 +25,7 @@ import {
 import { Invoice, Language, Currency, CompanySettings } from '../types';
 import { formatValue } from '../data';
 import * as db from '../lib/db';
-import { generateInvoicePDF } from '../lib/pdf';
+import { generateInvoicePDF, resolveCompanySettings } from '../lib/pdf';
 
 interface InvoicesViewProps {
   invoices: Invoice[];
@@ -59,9 +59,10 @@ export default function InvoicesView({
       companyName: '', nuit: '', address: '', city: '',
       phone: '', email: '', bankAccounts: [], mobileContacts: [], setupComplete: false,
     };
-    const settings = companySettings || defaultSettings;
+    const base = companySettings || defaultSettings;
+    const settings = resolveCompanySettings(base, inv.companyProfileId);
     const items = await db.fetchInvoiceItems(inv.id);
-    generateInvoicePDF(inv, items, settings);
+    await generateInvoicePDF(inv, items, settings);
   };
   
   // Pagination

@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabase';
-import { Invoice, Quote, Receipt, Expense, StockItem, Contact, DocumentItem, CompanySettings, BankAccount, MobileContact, DebtClient } from '../types';
+import { Invoice, Quote, Receipt, Expense, StockItem, Contact, DocumentItem, CompanySettings, BankAccount, MobileContact, DebtClient, SecondaryCompany } from '../types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -66,6 +66,8 @@ export function mapInvoice(row: Record<string, unknown>): Invoice {
     invoiceNumber: formatDocNumber('INV', seqNumber),
     client: row.client as string,
     clientNuit: (row.client_nuit as string | undefined) ?? undefined,
+    clientPhone: (row.client_phone as string | undefined) ?? undefined,
+    clientEmail: (row.client_email as string | undefined) ?? undefined,
     description: (row.description as string | undefined) ?? undefined,
     initials: getInitials(row.client as string),
     issueDate,
@@ -78,6 +80,8 @@ export function mapInvoice(row: Record<string, unknown>): Invoice {
       row.status === 'Paid' ? 'Pago' :
       row.status === 'Pending' ? 'Pendente' : 'Vencido',
     logoBg: (row.logo_bg as string) ?? 'bg-emerald-50 text-emerald-800 border border-emerald-500',
+    companyProfileId: (row.company_profile_id as string) === 'secondary' ? 'secondary' : 'primary',
+    notes: (row.notes as string | undefined) ?? undefined,
   };
 }
 
@@ -90,6 +94,8 @@ export function mapQuote(row: Record<string, unknown>): Quote {
     quoteNumber: formatDocNumber('QT', seqNumber),
     client: row.client as string,
     clientNuit: (row.client_nuit as string | undefined) ?? undefined,
+    clientPhone: (row.client_phone as string | undefined) ?? undefined,
+    clientEmail: (row.client_email as string | undefined) ?? undefined,
     description: (row.description as string | undefined) ?? undefined,
     initials: getInitials(row.client as string),
     issueDate,
@@ -100,8 +106,11 @@ export function mapQuote(row: Record<string, unknown>): Quote {
     status: row.status as Quote['status'],
     statusPt:
       row.status === 'Approved' ? 'Aprovado' :
-      row.status === 'Pending' ? 'Pendente' : 'Rejeitado',
+      row.status === 'Pending' ? 'Pendente' :
+      row.status === 'Liquidado' ? 'Liquidado' : 'Rejeitado',
     logoBg: (row.logo_bg as string) ?? 'bg-amber-100 text-amber-800',
+    companyProfileId: (row.company_profile_id as string) === 'secondary' ? 'secondary' : 'primary',
+    notes: (row.notes as string | undefined) ?? undefined,
   };
 }
 
@@ -122,6 +131,8 @@ export function mapReceipt(row: Record<string, unknown>): Receipt {
     method: row.method as string,
     methodPt: row.method_pt as string,
     invoiceRef: (row.invoice_ref as string) ?? '',
+    companyProfileId: (row.company_profile_id as string) === 'secondary' ? 'secondary' : 'primary',
+    notes: (row.notes as string | undefined) ?? undefined,
   };
 }
 
@@ -203,12 +214,16 @@ export async function createInvoice(payload: {
   userId: string;
   client: string;
   clientNuit?: string;
+  clientPhone?: string;
+  clientEmail?: string;
   description?: string;
   amount: number;
   status: Invoice['status'];
   issueDate: string;
   dueDate?: string;
   logoBg?: string;
+  companyProfileId?: 'primary' | 'secondary';
+  notes?: string;
 }): Promise<Invoice | null> {
   try {
     const { data, error } = await supabase
@@ -217,12 +232,16 @@ export async function createInvoice(payload: {
         user_id: payload.userId,
         client: payload.client,
         client_nuit: payload.clientNuit ?? null,
+        client_phone: payload.clientPhone ?? null,
+        client_email: payload.clientEmail ?? null,
         description: payload.description ?? null,
         amount: payload.amount,
         status: payload.status,
         issue_date: payload.issueDate,
         due_date: payload.dueDate ?? null,
         logo_bg: payload.logoBg ?? 'bg-emerald-50 text-emerald-800 border border-emerald-500',
+        company_profile_id: payload.companyProfileId ?? 'primary',
+        notes: payload.notes ?? null,
       })
       .select()
       .single();
@@ -274,11 +293,15 @@ export async function createQuote(payload: {
   userId: string;
   client: string;
   clientNuit?: string;
+  clientPhone?: string;
+  clientEmail?: string;
   description?: string;
   amount: number;
   issueDate: string;
   validityDays?: number;
   logoBg?: string;
+  companyProfileId?: 'primary' | 'secondary';
+  notes?: string;
 }): Promise<Quote | null> {
   try {
     const { data, error } = await supabase
@@ -287,12 +310,16 @@ export async function createQuote(payload: {
         user_id: payload.userId,
         client: payload.client,
         client_nuit: payload.clientNuit ?? null,
+        client_phone: payload.clientPhone ?? null,
+        client_email: payload.clientEmail ?? null,
         description: payload.description ?? null,
         amount: payload.amount,
         status: 'Pending',
         issue_date: payload.issueDate,
         validity_days: payload.validityDays ?? 15,
         logo_bg: payload.logoBg ?? 'bg-amber-100 text-amber-800',
+        company_profile_id: payload.companyProfileId ?? 'primary',
+        notes: payload.notes ?? null,
       })
       .select()
       .single();
@@ -340,6 +367,8 @@ export async function createReceipt(payload: {
   method: string;
   methodPt: string;
   paymentDate: string;
+  companyProfileId?: 'primary' | 'secondary';
+  notes?: string;
 }): Promise<Receipt | null> {
   try {
     const { data, error } = await supabase
@@ -353,6 +382,8 @@ export async function createReceipt(payload: {
         method: payload.method,
         method_pt: payload.methodPt,
         payment_date: payload.paymentDate,
+        company_profile_id: payload.companyProfileId ?? 'primary',
+        notes: payload.notes ?? null,
       })
       .select()
       .single();
@@ -614,6 +645,7 @@ export function mapSettings(row: Record<string, unknown>): CompanySettings {
     bankAccounts: (row.bank_accounts as BankAccount[]) ?? [],
     mobileContacts: (row.mobile_contacts as MobileContact[]) ?? [],
     setupComplete: (row.setup_complete as boolean) ?? false,
+    secondaryCompany: (row.secondary_company as SecondaryCompany | null | undefined) ?? undefined,
   };
 }
 
@@ -634,6 +666,7 @@ export function mapDebtClient(row: Record<string, unknown>): DebtClient {
     fullName: row.full_name as string,
     movitelNumber: (row.movitel_number as string) ?? '',
     vodacomNumber: (row.vodacom_number as string) ?? '',
+    email: (row.email as string | undefined) ?? undefined,
     address: (row.address as string) ?? '',
     status: (row.status as DebtClient['status']) ?? 'Pendente',
     createdAt: row.created_at as string | undefined,
@@ -659,6 +692,7 @@ export async function createDebtClient(payload: {
   fullName: string;
   movitelNumber: string;
   vodacomNumber: string;
+  email?: string;
   address: string;
   status: DebtClient['status'];
 }): Promise<DebtClient | null> {
@@ -670,11 +704,98 @@ export async function createDebtClient(payload: {
         full_name: payload.fullName,
         movitel_number: payload.movitelNumber,
         vodacom_number: payload.vodacomNumber,
+        email: payload.email ?? null,
         address: payload.address,
         status: payload.status,
       })
       .select()
       .single();
+    if (error || !data) return null;
+    return mapDebtClient(data);
+  } catch {
+    return null;
+  }
+}
+
+// Find an existing debt client by full name (case-insensitive) for a given user
+export async function findDebtClientByName(userId: string, fullName: string): Promise<DebtClient | null> {
+  try {
+    const { data, error } = await supabase
+      .from('debt_clients')
+      .select('*')
+      .eq('user_id', userId)
+      .ilike('full_name', fullName.trim())
+      .maybeSingle();
+    if (error || !data) return null;
+    return mapDebtClient(data);
+  } catch {
+    return null;
+  }
+}
+
+// Upsert a client from document creation: create if not exists, update contact info if exists
+export async function upsertDebtClientFromDocument(userId: string, params: {
+  fullName: string;
+  phone?: string;
+  email?: string;
+}): Promise<DebtClient | null> {
+  const existing = await findDebtClientByName(userId, params.fullName);
+  if (existing) {
+    // Update contact info but never downgrade status
+    try {
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (params.phone) updates.movitel_number = params.phone;
+      if (params.email) updates.email = params.email;
+      const { data, error } = await supabase
+        .from('debt_clients')
+        .update(updates)
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (error || !data) return existing;
+      return mapDebtClient(data);
+    } catch {
+      return existing;
+    }
+  }
+  return createDebtClient({
+    userId,
+    fullName: params.fullName,
+    movitelNumber: params.phone ?? '',
+    vodacomNumber: '',
+    email: params.email,
+    address: '',
+    status: 'Pendente',
+  });
+}
+
+// Mark all non-rejected, non-settled quotes for a client as Liquidado; returns settled IDs
+export async function settleQuotesByClientName(userId: string, clientName: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('quotes')
+      .update({ status: 'Liquidado' })
+      .eq('user_id', userId)
+      .ilike('client', clientName.trim())
+      .in('status', ['Pending', 'Approved'])
+      .select('id');
+    if (error || !data) return [];
+    return data.map((r: { id: string }) => r.id);
+  } catch {
+    return [];
+  }
+}
+
+// Settle the debt client record matching the given name
+export async function settleDebtClientByName(userId: string, clientName: string): Promise<DebtClient | null> {
+  try {
+    const { data, error } = await supabase
+      .from('debt_clients')
+      .update({ status: 'Liquidado', updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .ilike('full_name', clientName.trim())
+      .select()
+      .maybeSingle();
     if (error || !data) return null;
     return mapDebtClient(data);
   } catch {
@@ -720,6 +841,7 @@ export async function upsertCompanySettings(userId: string, settings: Partial<Co
     if (settings.bankAccounts !== undefined) payload.bank_accounts = settings.bankAccounts;
     if (settings.mobileContacts !== undefined) payload.mobile_contacts = settings.mobileContacts;
     if (settings.setupComplete !== undefined) payload.setup_complete = settings.setupComplete;
+    if ('secondaryCompany' in settings) payload.secondary_company = settings.secondaryCompany ?? null;
 
     const { data, error } = await supabase
       .from('company_settings')
