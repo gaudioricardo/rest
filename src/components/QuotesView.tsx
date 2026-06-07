@@ -6,9 +6,11 @@
 import { useState } from 'react';
 import { Quote, Language, Currency, CompanySettings } from '../types';
 import { formatValue } from '../data';
-import { FileCode, Plus, Search, HelpCircle, Check, X, ClipboardSignature, Eye, Download } from 'lucide-react';
+import { FileCode, Plus, Search, HelpCircle, Check, X, ClipboardSignature, Eye, Download, Trash2 } from 'lucide-react';
 import * as db from '../lib/db';
-import { generateQuotePDF, resolveCompanySettings } from '../lib/pdf';
+import { generateQuotePDF, resolveCompanySettings, PdfGenerationOptions } from '../lib/pdf';
+import PdfOptionsModal from './PdfOptionsModal';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 interface QuotesViewProps {
   quotes: Quote[];
@@ -35,16 +37,33 @@ export default function QuotesView({
 }: QuotesViewProps) {
 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pendingQuote, setPendingQuote] = useState<Quote | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
-  const handleDownloadPDF = async (q: Quote) => {
+  const handleDeleteQuote = async () => {
+    if (!deleteTarget) return;
+    await db.deleteQuote(deleteTarget.id);
+    setQuotes(quotes.filter(q => q.id !== deleteTarget.id));
+    if (selectedQuote?.id === deleteTarget.id) setSelectedQuote(null);
+  };
+
+  const handleDownloadPDF = (q: Quote) => {
+    setPendingQuote(q);
+    setPdfModalOpen(true);
+  };
+
+  const handleGeneratePDF = async (options: PdfGenerationOptions) => {
+    if (!pendingQuote) return;
     const defaultSettings: CompanySettings = {
       companyName: '', nuit: '', address: '', city: '',
       phone: '', email: '', bankAccounts: [], mobileContacts: [], setupComplete: false,
     };
     const base = companySettings || defaultSettings;
-    const settings = resolveCompanySettings(base, q.companyProfileId);
-    const items = await db.fetchQuoteItems(q.id);
-    await generateQuotePDF(q, items, settings);
+    const settings = resolveCompanySettings(base, pendingQuote.companyProfileId);
+    const items = await db.fetchQuoteItems(pendingQuote.id);
+    await generateQuotePDF(pendingQuote, items, settings, options);
+    setPendingQuote(null);
   };
 
   const now = new Date();
@@ -81,6 +100,21 @@ export default function QuotesView({
   });
 
   return (
+    <>
+    <PdfOptionsModal
+      isOpen={pdfModalOpen}
+      onClose={() => { setPdfModalOpen(false); setPendingQuote(null); }}
+      onGenerate={handleGeneratePDF}
+      language={language}
+      hasStamp={!!(companySettings?.stampBase64)}
+    />
+    <DeleteConfirmModal
+      isOpen={!!deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDeleteQuote}
+      language={language}
+      documentLabel={deleteTarget?.label ?? ''}
+    />
     <div className="space-y-6 animation-fade-in text-left">
       
       {/* Upper header */}
@@ -140,6 +174,7 @@ export default function QuotesView({
                         {q.status === 'Pending' && (<button onClick={(e) => { e.stopPropagation(); handleApproveQuote(q.id, q.quoteNumber); }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[9px] uppercase px-3 py-1.5 rounded inline-flex items-center gap-1 shadow-xs transition-smooth cursor-pointer"><Check size={11} /><span>{language === 'en' ? 'Approve' : 'Aprovar'}</span></button>)}
                         <button onClick={(e) => { e.stopPropagation(); setSelectedQuote(q); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded inline-block transition-smooth cursor-pointer" title={language === 'en' ? 'Open details' : 'Abrir detalhes'}><Eye size={14} /></button>
                         <button onClick={(e) => { e.stopPropagation(); handleDownloadPDF(q); }} className="p-1.5 hover:bg-blue-100 dark:hover:bg-slate-850 text-slate-400 hover:text-blue-600 dark:hover:text-white rounded inline-block transition-smooth cursor-pointer" title={language === 'en' ? 'Download PDF' : 'Descarregar PDF'}><Download size={14} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: q.id, label: q.quoteNumber }); }} className="p-1.5 hover:bg-red-100 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded inline-block transition-smooth cursor-pointer" title={language === 'en' ? 'Delete quote' : 'Eliminar cotação'}><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   ))
@@ -171,6 +206,12 @@ export default function QuotesView({
                 <p className="text-[10px] uppercase tracking-wider text-slate-400">{language === 'en' ? 'Value' : 'Valor'}</p>
                 <p className="mt-1 text-lg font-black text-primary dark:text-white">{formatValue(selectedQuote.amount, currency)}</p>
               </div>
+              {selectedQuote.description && (
+                <div className="rounded-lg border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-bold mb-1">{language === 'en' ? 'Note' : 'Nota'}</p>
+                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{selectedQuote.description}</p>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 {selectedQuote.status === 'Pending' && <button onClick={() => handleApproveQuote(selectedQuote.id, selectedQuote.quoteNumber)} className="px-3 py-2 rounded bg-emerald-600 text-white text-xs font-bold">{language === 'en' ? 'Approve' : 'Aprovar'}</button>}
                 <button onClick={() => handleDownloadPDF(selectedQuote)} className="px-3 py-2 rounded bg-blue-600 text-white text-xs font-bold">{language === 'en' ? 'Download PDF' : 'Descarregar PDF'}</button>
@@ -183,5 +224,6 @@ export default function QuotesView({
       </div>
 
     </div>
+    </>
   );
 }

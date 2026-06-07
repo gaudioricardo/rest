@@ -342,6 +342,15 @@ export async function updateQuoteStatus(id: string, status: Quote['status']): Pr
   }
 }
 
+export async function deleteQuote(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('quotes').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 // ─── Receipt CRUD ────────────────────────────────────────────────────────────
 
 export async function fetchReceipts(userId: string): Promise<Receipt[]> {
@@ -391,6 +400,15 @@ export async function createReceipt(payload: {
     return mapReceipt(data);
   } catch {
     return null;
+  }
+}
+
+export async function deleteReceipt(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('receipts').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
   }
 }
 
@@ -517,6 +535,15 @@ export async function updateStockLevel(id: string, stockLevel: number): Promise<
       .from('stock_items')
       .update({ stock_level: stockLevel })
       .eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteStockItem(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('stock_items').delete().eq('id', id);
     return !error;
   } catch {
     return false;

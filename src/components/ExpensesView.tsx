@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { Expense, Language, Currency } from '../types';
 import { formatValue } from '../data';
 import { CreditCard, Plus, Search, HelpCircle, Check, Trash2 } from 'lucide-react';
+import * as db from '../lib/db';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 interface ExpensesViewProps {
   expenses: Expense[];
@@ -30,18 +32,21 @@ export default function ExpensesView({
   onDeleteExpense: onDeleteExpenseProp,
 }: ExpensesViewProps) {
 
-  const handleDeleteExpense = (id: string, ref: string) => {
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+
+  const handleDeleteExpense = async () => {
+    if (!deleteTarget) return;
+    await db.deleteExpense(deleteTarget.id);
     if (onDeleteExpenseProp) {
-      onDeleteExpenseProp(id);
-      return;
+      onDeleteExpenseProp(deleteTarget.id);
+    } else {
+      setExpenses(expenses.filter(exp => exp.id !== deleteTarget.id));
     }
-    const updated = expenses.filter(exp => exp.id !== id);
-    setExpenses(updated);
     triggerToast(
       'Expense Removed',
       'Despesa Removida',
-      `Procurement record ${ref} was successfully deleted from ERP cache.`,
-      `O registro de despesa ${ref} foi excluído do cache do ERP.`,
+      `Procurement record ${deleteTarget.label} was successfully deleted.`,
+      `O registro de despesa ${deleteTarget.label} foi eliminado permanentemente.`,
       'info'
     );
   };
@@ -55,8 +60,16 @@ export default function ExpensesView({
   const totalSpend = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
 
   return (
+    <>
+    <DeleteConfirmModal
+      isOpen={!!deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDeleteExpense}
+      language={language}
+      documentLabel={deleteTarget?.label ?? ''}
+    />
     <div className="space-y-6 animation-fade-in text-left">
-      
+
       {/* Title */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -138,9 +151,9 @@ export default function ExpensesView({
                   </td>
                   <td className="px-6 py-3 text-right">
                     <button
-                      onClick={() => handleDeleteExpense(exp.id, exp.ref)}
+                      onClick={() => setDeleteTarget({ id: exp.id, label: exp.ref })}
                       className="p-1.5 hover:bg-red-50 dark:hover:bg-red-955/20 text-slate-400 hover:text-red-650 dark:hover:text-red-400 rounded transition-smooth cursor-pointer"
-                      title="Delete expense file"
+                      title={language === 'en' ? 'Delete expense' : 'Eliminar despesa'}
                     >
                       <Trash2 size={13} />
                     </button>
@@ -159,5 +172,6 @@ export default function ExpensesView({
       </div>
 
     </div>
+    </>
   );
 }

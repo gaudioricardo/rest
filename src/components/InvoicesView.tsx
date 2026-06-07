@@ -20,12 +20,15 @@ import {
   TrendingUp,
   CreditCard,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { Invoice, Language, Currency, CompanySettings } from '../types';
 import { formatValue } from '../data';
 import * as db from '../lib/db';
-import { generateInvoicePDF, resolveCompanySettings } from '../lib/pdf';
+import { generateInvoicePDF, resolveCompanySettings, PdfGenerationOptions } from '../lib/pdf';
+import PdfOptionsModal from './PdfOptionsModal';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 interface InvoicesViewProps {
   invoices: Invoice[];
@@ -53,16 +56,33 @@ export default function InvoicesView({
   
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pendingInvoice, setPendingInvoice] = useState<Invoice | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
-  const handleDownloadPDF = async (inv: Invoice) => {
+  const handleDeleteInvoice = async () => {
+    if (!deleteTarget) return;
+    await db.deleteInvoice(deleteTarget.id);
+    setInvoices(invoices.filter(inv => inv.id !== deleteTarget.id));
+    if (selectedInvoice?.id === deleteTarget.id) setSelectedInvoice(null);
+  };
+
+  const handleDownloadPDF = (inv: Invoice) => {
+    setPendingInvoice(inv);
+    setPdfModalOpen(true);
+  };
+
+  const handleGeneratePDF = async (options: PdfGenerationOptions) => {
+    if (!pendingInvoice) return;
     const defaultSettings: CompanySettings = {
       companyName: '', nuit: '', address: '', city: '',
       phone: '', email: '', bankAccounts: [], mobileContacts: [], setupComplete: false,
     };
     const base = companySettings || defaultSettings;
-    const settings = resolveCompanySettings(base, inv.companyProfileId);
-    const items = await db.fetchInvoiceItems(inv.id);
-    await generateInvoicePDF(inv, items, settings);
+    const settings = resolveCompanySettings(base, pendingInvoice.companyProfileId);
+    const items = await db.fetchInvoiceItems(pendingInvoice.id);
+    await generateInvoicePDF(pendingInvoice, items, settings, options);
+    setPendingInvoice(null);
   };
   
   // Pagination
@@ -143,6 +163,21 @@ export default function InvoicesView({
     .toISOString().split('T')[0];
 
   return (
+    <>
+    <PdfOptionsModal
+      isOpen={pdfModalOpen}
+      onClose={() => { setPdfModalOpen(false); setPendingInvoice(null); }}
+      onGenerate={handleGeneratePDF}
+      language={language}
+      hasStamp={!!(companySettings?.stampBase64)}
+    />
+    <DeleteConfirmModal
+      isOpen={!!deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDeleteInvoice}
+      language={language}
+      documentLabel={deleteTarget?.label ?? ''}
+    />
     <div className="space-y-6 animation-fade-in text-left">
       
       {/* Title block */}
@@ -368,6 +403,16 @@ export default function InvoicesView({
                           >
                             <Download size={12} />
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteTarget({ id: inv.id, label: inv.invoiceNumber });
+                            }}
+                            className="p-1.5 bg-slate-100 hover:bg-red-600 hover:text-white dark:bg-slate-800 transition-colors text-slate-500 dark:text-slate-400 rounded cursor-pointer"
+                            title={language === 'en' ? 'Delete invoice' : 'Eliminar factura'}
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -435,6 +480,12 @@ export default function InvoicesView({
                 <p className="text-[10px] uppercase tracking-wider text-slate-400">{language === 'en' ? 'Amount' : 'Valor'}</p>
                 <p className="mt-1 text-lg font-black text-primary dark:text-white">{formatValue(selectedInvoice.amount, currency)}</p>
               </div>
+              {selectedInvoice.description && (
+                <div className="rounded-lg border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-bold mb-1">{language === 'en' ? 'Note' : 'Nota'}</p>
+                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{selectedInvoice.description}</p>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 {selectedInvoice.status !== 'Paid' && (
                   <button
@@ -459,5 +510,6 @@ export default function InvoicesView({
       </div>
 
     </div>
+    </>
   );
 }

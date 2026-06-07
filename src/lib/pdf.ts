@@ -93,6 +93,13 @@ function stampImg(base64?: string): string {
   return `<img src="${base64}" style="width:100%;height:100%;object-fit:contain;display:block;" crossorigin="anonymous" />`;
 }
 
+// ─── PDF Generation Options ───────────────────────────────────────────────────
+
+export interface PdfGenerationOptions {
+  includeStamp?: boolean;
+  taxType?: 'none' | 'iva' | 'ispc';
+}
+
 // ─── Core: render HTML → canvas → PDF ────────────────────────────────────────
 
 async function renderToPDF(
@@ -142,14 +149,25 @@ async function renderToPDF(
 export async function generateInvoicePDF(
   invoice: Invoice,
   items: DocumentItem[],
-  settings: CompanySettings
+  settings: CompanySettings,
+  options?: PdfGenerationOptions
 ): Promise<void> {
   const displayItems = items.length > 0
     ? items
     : [{ description: invoice.description || 'Serviços prestados', quantity: 1, unitPrice: invoice.amount }];
 
   const subtotal = displayItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
-  const total = subtotal;
+  const taxType = options?.taxType ?? 'ispc';
+  const taxAmount = taxType === 'iva' ? subtotal * 0.16 : taxType === 'ispc' ? subtotal * 0.03 : 0;
+  const total = subtotal + taxAmount;
+  const invTaxRowHtml = taxType === 'none'
+    ? `<div style="display:flex;justify-content:space-between;border-bottom:1.2px dotted #000;padding-bottom:4px;margin-bottom:6px;font-size:12px;color:#000;"><span>Imposto:</span><span>Isento</span></div>`
+    : taxType === 'iva'
+    ? `<div style="display:flex;justify-content:space-between;border-bottom:1.2px dotted #000;padding-bottom:4px;margin-bottom:6px;font-size:12px;color:#000;"><span>IVA 16%:</span><span>${fmtMT(taxAmount)}</span></div>`
+    : `<div style="display:flex;justify-content:space-between;border-bottom:1.2px dotted #000;padding-bottom:4px;margin-bottom:6px;font-size:12px;color:#000;"><span>ISPC 3%:</span><span>${fmtMT(taxAmount)}</span></div>`;
+  const invExemptionText = taxType === 'iva'
+    ? `<strong>Sujeito a IVA:</strong><br>Taxa legal de 16% sobre o valor líquido.`
+    : `<strong>Motivo de não incidência do IVA:</strong><br>Tributação ISPC, Lei 5/2009 e 12 de Janeiro`;
 
   const itemsRowsHtml = displayItems.map((item, i) => `
     <tr style="height:30px;">
@@ -235,8 +253,7 @@ export async function generateInvoicePDF(
         <!-- Esquerda: isenção + pagamento -->
         <div style="width:57%;display:flex;flex-direction:column;gap:8px;">
           <div style="font-size:11px;color:#000;line-height:1.4;">
-            <strong>Motivo de não incidência do IVA:</strong><br>
-            Tributação ISPC, Lei 5/2009 e 12 de Janeiro
+            ${invExemptionText}
           </div>
           <div style="font-size:11.5px;color:#000;font-weight:bold;display:flex;gap:14px;flex-wrap:wrap;">
             <span>[&nbsp;&nbsp;] Dinheiro</span>
@@ -250,25 +267,23 @@ export async function generateInvoicePDF(
         </div>
 
         <!-- Direita: totais + assinatura -->
-        <div style="width:40%;display:flex;flex-direction:column;gap:8px;position:relative;min-height:140px;">
+        <div style="width:40%;display:flex;flex-direction:column;gap:8px;position:relative;min-height:210px;">
           <div style="position:relative;z-index:60;font-size:12px;color:#000;line-height:1.4;border:1.5px solid #000;padding:12px;border-radius:6px;background:#fafafa;margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
               <span>Sub-total:</span><span>${fmtMT(subtotal)}</span>
             </div>
-            <div style="display:flex;justify-content:space-between;border-bottom:1.2px dotted #000;padding-bottom:4px;margin-bottom:6px;">
-              <span>ISPC 3%:</span><span>Incluso</span>
-            </div>
+            ${invTaxRowHtml}
             <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;">
               <span>TOTAL:</span><span style="color:#c2410c;">${fmtMT(total)}</span>
             </div>
           </div>
           <div style="position:relative;z-index:55;border:1.2px dashed #777;padding:10px 12px 6px 12px;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;min-height:68px;justify-content:flex-end;">
-            ${settings.stampBase64
-              ? `<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-4deg);width:260px;height:110px;pointer-events:none;z-index:80;">${stampImg(settings.stampBase64)}</div>`
-              : ''}
             <div style="width:80%;height:1px;border-top:1.2px solid #333;margin-bottom:4px;position:relative;z-index:90;"></div>
             <div style="font-size:9px;font-weight:700;color:#333;position:relative;z-index:90;">Assinatura e Carimbo</div>
           </div>
+          ${(options?.includeStamp !== false) && settings.stampBase64
+            ? `<div style="position:absolute;left:50%;bottom:5px;transform:translateX(-50%) rotate(-4deg);width:240px;height:120px;pointer-events:none;z-index:80;">${stampImg(settings.stampBase64)}</div>`
+            : ''}
         </div>
 
       </div>
@@ -283,15 +298,26 @@ export async function generateInvoicePDF(
 export async function generateQuotePDF(
   quote: Quote,
   items: DocumentItem[],
-  settings: CompanySettings
+  settings: CompanySettings,
+  options?: PdfGenerationOptions
 ): Promise<void> {
   const displayItems = items.length > 0
     ? items
     : [{ description: quote.description || 'Proposta de serviços', quantity: 1, unitPrice: quote.amount }];
 
   const subtotal = displayItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
-  const total = subtotal;
+  const taxType = options?.taxType ?? 'ispc';
+  const taxAmount = taxType === 'iva' ? subtotal * 0.16 : taxType === 'ispc' ? subtotal * 0.03 : 0;
+  const total = subtotal + taxAmount;
   const extenso = amountToWordsPt(total);
+  const qtTaxRowHtml = taxType === 'none'
+    ? `<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;border-bottom:1.5px dotted #000;padding-bottom:4px;margin-bottom:4px;"><span>Imposto:</span><span>Isento</span></div>`
+    : taxType === 'iva'
+    ? `<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;border-bottom:1.5px dotted #000;padding-bottom:4px;margin-bottom:4px;"><span>IVA 16%:</span><span>${fmtMT(taxAmount)}</span></div>`
+    : `<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;border-bottom:1.5px dotted #000;padding-bottom:4px;margin-bottom:4px;"><span>ISPC 3%:</span><span>${fmtMT(taxAmount)}</span></div>`;
+  const qtExemptionText = taxType === 'iva'
+    ? `<strong>Sujeito a IVA:</strong><br>Taxa legal de 16% sobre o valor líquido.`
+    : `Tributação ISPC, Lei 5/2009 e 12 de Janeiro.<br>Isenção de IVA ao abrigo do regulamento simplificado de pequenos contribuintes (Moçambique).`;
 
   const numberOfItems = displayItems.length;
   const itemRowHtml = displayItems.map(item => `
@@ -407,8 +433,7 @@ export async function generateQuotePDF(
           <div style="width:54%;border:2px solid #000;border-radius:8px;padding:10px;background:#fff;">
             <div style="font-weight:bold;font-size:11px;margin-bottom:8px;color:#000;text-transform:uppercase;">Motivos de Justificação da não Aplicação do Imposto:</div>
             <div style="font-size:12px;line-height:1.5;font-weight:bold;color:#374151;">
-              Tributação ISPC, Lei 5/2009 e 12 de Janeiro.<br>
-              Isenção de IVA ao abrigo do regulamento simplificado de pequenos contribuintes (Moçambique).
+              ${qtExemptionText}
             </div>
           </div>
           <!-- Totais -->
@@ -416,9 +441,7 @@ export async function generateQuotePDF(
             <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;">
               <span>Sub-Total:</span><span>${fmtMT(subtotal)}</span>
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;border-bottom:1.5px dotted #000;padding-bottom:4px;margin-bottom:4px;">
-              <span>ISPC 3%:</span><span>Incluso</span>
-            </div>
+            ${qtTaxRowHtml}
             <div style="display:flex;justify-content:space-between;font-weight:900;font-size:15px;color:#000;">
               <span>TOTAL:</span><span style="color:#c2410c;">${fmtMT(total)}</span>
             </div>
@@ -432,7 +455,7 @@ export async function generateQuotePDF(
             ${settings.email ? `<span>${settings.email}</span>` : ''}
           </div>
           <div style="width:45%;display:flex;flex-direction:column;align-items:center;position:relative;">
-            ${settings.stampBase64
+            ${(options?.includeStamp !== false) && settings.stampBase64
               ? `<div style="position:absolute;right:30px;top:-10px;width:260px;height:110px;transform:rotate(-3deg);pointer-events:none;z-index:50;">${stampImg(settings.stampBase64)}</div>`
               : ''}
             <div style="width:100%;border-top:1.5px solid #000;text-align:center;padding-top:6px;font-size:13px;font-weight:bold;color:#000;margin-top:70px;">Assinatura e Carimbo</div>

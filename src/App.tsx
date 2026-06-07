@@ -1111,6 +1111,7 @@ export default function App() {
             {activeTab === 'receipts' && (
               <ReceiptsView
                 receipts={receipts}
+                setReceipts={setReceipts}
                 quotes={quotes}
                 language={language}
                 currency={currency}
@@ -1294,7 +1295,7 @@ export default function App() {
       {activeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
 
-          <div className="bg-white dark:bg-slate-955 w-full sm:w-[560px] max-w-[38rem] flex-shrink-0 rounded-2xl border border-slate-300 dark:border-slate-900 shadow-2xl max-h-[90vh] flex flex-col animation-scale-up text-left">
+          <div className="modal-content bg-white dark:bg-slate-955 w-full sm:w-[560px] max-w-[38rem] rounded-2xl border border-slate-300 dark:border-slate-900 shadow-2xl max-h-[90vh] flex flex-col animation-scale-up text-left">
 
             {/* Modal Title bar */}
             <div className="p-6 border-b border-slate-100 dark:border-slate-900 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/40">
@@ -1727,17 +1728,6 @@ export default function App() {
                         className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200"
                       />
                     </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Service Description' : 'Descrição do Serviço'}</label>
-                    <textarea
-                      value={formQuoteDescription}
-                      onChange={(e) => setFormQuoteDescription(e.target.value)}
-                      placeholder={language === 'en' ? 'Describe the proposed service...' : 'Descreva o serviço proposto...'}
-                      rows={2}
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-955 dark:text-slate-200 resize-none outline-none focus:border-blue-500"
-                    />
                   </div>
 
                   {/* Line items */}

@@ -4,11 +4,12 @@
  */
 
 import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Plus, Trash2, ChevronLeft, ChevronRight, Check, Building2, Phone,
   CreditCard, Smartphone, ImageIcon, FileDown, Moon, Sun, MessageCircle,
-  AlertCircle, Mail, Shield, BookOpen, Banknote, Edit3, X,
+  AlertCircle, Mail, Wifi, Network, Shield, Edit3, X,
 } from 'lucide-react';
 import { Language, CompanySettings, BankAccount, MobileContact, SecondaryCompany } from '../types';
 
@@ -493,7 +494,7 @@ export default function SettingsView({
     return (
       <div className="fixed inset-0 z-[200] overflow-y-auto bg-slate-950/80 backdrop-blur-sm">
         <div className="min-h-screen flex items-center justify-center px-3 py-6 sm:px-4 sm:py-12">
-          <div className="w-full max-w-[min(100vw-1rem,36rem)]">
+          <div className="w-full max-w-[min(100vw-1rem,36rem)] modal-content">
             {wizardCard}
           </div>
         </div>
@@ -505,35 +506,35 @@ export default function SettingsView({
   const freeLeft = Math.max(0, MAX_FREE_EDITS - updateCount);
 
   const services = [
-    {
-      icon: Shield,
-      name: 'SAFT-MZ',
-      desc: language === 'en' ? 'Tax authority file generation for AT.' : 'Geração de ficheiro para a Autoridade Tributária.',
-      badge: language === 'en' ? 'Available' : 'Disponível',
-      badgeColor: 'emerald',
-    },
-    {
-      icon: Banknote,
-      name: 'e-NUIT',
-      desc: language === 'en' ? 'Tax number validation & verification.' : 'Validação e verificação de número de contribuinte.',
-      badge: language === 'en' ? 'Available' : 'Disponível',
-      badgeColor: 'emerald',
-    },
-    {
-      icon: Smartphone,
-      name: 'M-Pesa Business API',
-      desc: language === 'en' ? 'Automated payment collection via mobile.' : 'Cobrança automática via carteira móvel.',
-      badge: language === 'en' ? 'Coming Soon' : 'Em breve',
-      badgeColor: 'amber',
-    },
-    {
-      icon: BookOpen,
-      name: language === 'en' ? 'ERP Training' : 'Formação ERP',
-      desc: language === 'en' ? 'On-site or remote training sessions.' : 'Sessões de formação presenciais ou remotas.',
-      badge: language === 'en' ? 'On request' : 'Sob pedido',
-      badgeColor: 'blue',
-    },
-  ];
+{
+icon: Network,
+name: language === 'en' ? 'Computer Networks' : 'Redes de Computadores',
+desc: language === 'en'
+? 'Corporate network setup, printers and connectivity.'
+: 'Instalação de redes empresariais, impressoras e conectividade.',
+badge: language === 'en' ? 'Available' : 'Disponível',
+badgeColor: 'emerald',
+},
+{
+icon: Shield,
+name: 'M-Drive',
+desc: language === 'en'
+? 'Ultra-private corporate social network.'
+: 'Rede social corporativa ultra privada.',
+badge: language === 'en' ? 'Available' : 'Disponível',
+badgeColor: 'emerald',
+},
+{
+icon: Wifi,
+name: 'Wall Break Network',
+desc: language === 'en'
+? 'Long-range office internet sharing solution.'
+: 'Partilha de internet corporativa sem limites de distância.',
+badge: language === 'en' ? 'Available' : 'Disponível',
+badgeColor: 'emerald',
+},
+];
+
 
   return (
     <div className="space-y-6 animation-fade-in text-left pb-10">
@@ -897,11 +898,11 @@ export default function SettingsView({
       {/* ── Edit Modal ── */}
       {showEditModal && (
         <div className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
-          <div className="min-h-screen flex items-center justify-center px-3 py-6 sm:px-4 sm:py-12">
-            <div className="w-full max-w-[min(100vw-1rem,36rem)]">
-              {wizardCard}
+            <div className="min-h-screen flex items-center justify-center px-3 py-6 sm:px-4 sm:py-12">
+              <div className="w-full max-w-[min(100vw-1rem,36rem)] modal-content">
+                {wizardCard}
+              </div>
             </div>
-          </div>
         </div>
       )}
 
@@ -909,7 +910,7 @@ export default function SettingsView({
       {showSecondaryModal && (
         <div className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
           <div className="min-h-screen flex items-center justify-center px-3 py-6 sm:px-4 sm:py-12">
-            <div className="w-full max-w-[min(100vw-1rem,42rem)] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="w-full max-w-[min(100vw-1rem,42rem)] modal-content bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden">
               <div className="h-1 bg-gradient-to-r from-secondary to-amber-400" />
 
               {/* Header */}
@@ -1126,9 +1127,9 @@ export default function SettingsView({
       )}
 
       {/* ── Fee Modal ── */}
-      {showFeeModal && (
-        <div className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animation-scale-up">
+      {showFeeModal && createPortal(
+        <div className="fixed inset-0 z-[9000] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div role="dialog" aria-modal="true" aria-label="profile-update-fee" className="modal-content bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animation-scale-up">
             <div className="h-1.5 bg-gradient-to-r from-amber-400 to-orange-500" />
             <div className="p-7 text-center space-y-5">
               <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto">
@@ -1178,7 +1179,8 @@ export default function SettingsView({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

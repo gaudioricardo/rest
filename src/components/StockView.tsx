@@ -4,24 +4,27 @@
  */
 
 import { useState } from 'react';
-import { 
-  Share2, 
-  ChevronDown, 
-  TableProperties, 
-  FileSpreadsheet, 
-  FileCheck, 
-  Edit3, 
-  MoreVertical, 
-  ChevronLeft, 
-  ChevronRight, 
-  Search, 
+import {
+  Share2,
+  ChevronDown,
+  TableProperties,
+  FileSpreadsheet,
+  FileCheck,
+  Edit3,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  Search,
   Filter,
   CheckCircle,
   PackagePlus,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
 import { StockItem, Language, Currency } from '../types';
 import { formatValue } from '../data';
+import * as db from '../lib/db';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 interface StockViewProps {
   stockItems: StockItem[];
@@ -43,6 +46,14 @@ export default function StockView({
   searchQuery
 }: StockViewProps) {
   
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+
+  const handleDeleteStockItem = async () => {
+    if (!deleteTarget) return;
+    await db.deleteStockItem(deleteTarget.id);
+    setStockItems(stockItems.filter(item => item.id !== deleteTarget.id));
+  };
+
   // Local filter states
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -155,8 +166,16 @@ export default function StockView({
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
 
   return (
+    <>
+    <DeleteConfirmModal
+      isOpen={!!deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDeleteStockItem}
+      language={language}
+      documentLabel={deleteTarget?.label ?? ''}
+    />
     <div className="space-y-6 animation-fade-in text-left">
-      
+
       {/* View Title Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -400,6 +419,13 @@ export default function StockView({
                         <button className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded inline-block text-slate-400 cursor-pointer">
                           <MoreVertical size={13} />
                         </button>
+                        <button
+                          onClick={() => setDeleteTarget({ id: item.id, label: item.name })}
+                          className="p-1 hover:bg-red-100 dark:hover:bg-red-950/30 rounded inline-block text-slate-400 hover:text-red-600 dark:hover:text-red-400 cursor-pointer"
+                          title={language === 'en' ? 'Delete item' : 'Eliminar item'}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -462,7 +488,8 @@ export default function StockView({
           </div>
         </div>
       </div>
-      
+
     </div>
+    </>
   );
 }

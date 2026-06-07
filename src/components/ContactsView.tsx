@@ -5,7 +5,9 @@
 
 import { useState } from 'react';
 import { Contact, Language } from '../types';
-import { Users, Plus, Mail, Phone, Building, Search, UserCheck } from 'lucide-react';
+import { Users, Plus, Mail, Phone, Building, Search, UserCheck, Trash2 } from 'lucide-react';
+import * as db from '../lib/db';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 interface ContactsViewProps {
   contacts: Contact[];
@@ -23,15 +25,31 @@ export default function ContactsView({
   searchQuery
 }: ContactsViewProps) {
 
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+
+  const handleDeleteContact = async () => {
+    if (!deleteTarget) return;
+    await db.deleteContact(deleteTarget.id);
+    setContacts(contacts.filter(c => c.id !== deleteTarget.id));
+  };
+
   const filteredContacts = contacts.filter(c => {
-    return c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    return c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
            c.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
            c.email.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   return (
+    <>
+    <DeleteConfirmModal
+      isOpen={!!deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDeleteContact}
+      language={language}
+      documentLabel={deleteTarget?.label ?? ''}
+    />
     <div className="space-y-6 animation-fade-in text-left">
-      
+
       {/* Directory Title */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -99,18 +117,27 @@ export default function ContactsView({
               </div>
 
               {/* Action buttons inside card */}
-              <div className="grid grid-cols-2 gap-2 mt-5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <a 
-                  href={`mailto:${c.email}`} 
-                  className="py-1.5 px-3 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-center rounded text-[10px] font-bold text-slate-700 dark:text-slate-300 transition-smooth"
+              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={`mailto:${c.email}`}
+                    className="py-1.5 px-3 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-center rounded text-[10px] font-bold text-slate-700 dark:text-slate-300 transition-smooth"
+                  >
+                    {language === 'en' ? 'Email Client' : 'Enviar E-mail'}
+                  </a>
+                  <button
+                    onClick={() => alert(`Reviewing trade logs of ${c.name} associated with ${c.company}...`)}
+                    className="py-1.5 px-3 bg-secondary/10 text-secondary hover:bg-secondary/20 text-center rounded text-[10px] font-bold transition-smooth cursor-pointer"
+                  >
+                    {language === 'en' ? 'History Logs' : 'Ver Histórico'}
+                  </button>
+                </div>
+                <button
+                  onClick={() => setDeleteTarget({ id: c.id, label: c.name })}
+                  className="w-full py-1.5 px-3 bg-slate-50 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded text-[10px] font-bold transition-smooth cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {language === 'en' ? 'Email Client' : 'Enviar E-mail'}
-                </a>
-                <button 
-                  onClick={() => alert(`Reviewing trade logs of ${c.name} associated with ${c.company}...`)}
-                  className="py-1.5 px-3 bg-secondary/10 text-secondary hover:bg-secondary/20 text-center rounded text-[10px] font-bold transition-smooth cursor-pointer"
-                >
-                  {language === 'en' ? 'History Logs' : 'Ver Histórico'}
+                  <Trash2 size={11} />
+                  {language === 'en' ? 'Delete Contact' : 'Eliminar Contacto'}
                 </button>
               </div>
             </div>
@@ -124,5 +151,6 @@ export default function ContactsView({
       </div>
 
     </div>
+    </>
   );
 }

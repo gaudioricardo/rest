@@ -6,11 +6,14 @@
 import { useState } from 'react';
 import { Receipt, Quote, Language, Currency, CompanySettings } from '../types';
 import { formatValue } from '../data';
-import { Receipt as ReceiptIcon, Eye, Download, FileText } from 'lucide-react';
+import { Receipt as ReceiptIcon, Eye, Download, FileText, Trash2 } from 'lucide-react';
 import { generateReceiptPDF, amountToWordsPt, resolveCompanySettings } from '../lib/pdf';
+import * as db from '../lib/db';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 interface ReceiptsViewProps {
   receipts: Receipt[];
+  setReceipts: (rcs: Receipt[]) => void;
   quotes: Quote[];
   language: Language;
   currency: Currency;
@@ -18,7 +21,7 @@ interface ReceiptsViewProps {
   companySettings?: CompanySettings;
 }
 
-export default function ReceiptsView({ receipts, quotes, language, currency, searchQuery, companySettings }: ReceiptsViewProps) {
+export default function ReceiptsView({ receipts, setReceipts, quotes, language, currency, searchQuery, companySettings }: ReceiptsViewProps) {
   const defaultSettings: CompanySettings = {
     companyName: '', nuit: '', address: '', city: '',
     phone: '', email: '', bankAccounts: [], mobileContacts: [], setupComplete: false,
@@ -37,6 +40,14 @@ export default function ReceiptsView({ receipts, quotes, language, currency, sea
   };
 
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+
+  const handleDeleteReceipt = async () => {
+    if (!deleteTarget) return;
+    await db.deleteReceipt(deleteTarget.id);
+    setReceipts(receipts.filter(rc => rc.id !== deleteTarget.id));
+    if (selectedReceipt?.id === deleteTarget.id) setSelectedReceipt(null);
+  };
 
   const filteredReceipts = receipts.filter(rc =>
     rc.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -45,8 +56,16 @@ export default function ReceiptsView({ receipts, quotes, language, currency, sea
   );
 
   return (
+    <>
+    <DeleteConfirmModal
+      isOpen={!!deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={handleDeleteReceipt}
+      language={language}
+      documentLabel={deleteTarget?.label ?? ''}
+    />
     <div className="space-y-6 animation-fade-in text-left">
-      
+
       {/* Upper Title block */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-display">
@@ -124,6 +143,16 @@ export default function ReceiptsView({ receipts, quotes, language, currency, sea
                       title={language === 'en' ? 'Download PDF' : 'Descarregar PDF'}
                     >
                       <Download size={13} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget({ id: rc.id, label: rc.receiptNumber });
+                      }}
+                      className="p-1.5 hover:bg-red-100 dark:hover:bg-red-950/30 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded inline-flex cursor-pointer transition-smooth"
+                      title={language === 'en' ? 'Delete receipt' : 'Eliminar recibo'}
+                    >
+                      <Trash2 size={13} />
                     </button>
                   </td>
                 </tr>
@@ -204,5 +233,6 @@ export default function ReceiptsView({ receipts, quotes, language, currency, sea
       </div>
 
     </div>
+    </>
   );
 }

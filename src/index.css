@@ -156,6 +156,16 @@ html.dark body {
 
 .animation-scale-up {
   animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+/* Generic modal content helper to avoid layout collapsing when animating */
+.modal-content {
+  min-width: 320px;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  flex-shrink: 0;
 }
 
 .animation-slide-in {
