@@ -264,7 +264,7 @@ export async function generateInvoicePDF(
           </div>
           <div style="position:relative;z-index:55;border:1.2px dashed #777;padding:10px 12px 6px 12px;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;min-height:68px;justify-content:flex-end;">
             ${settings.stampBase64
-              ? `<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-4deg);width:240px;height:120px;pointer-events:none;z-index:80;">${stampImg(settings.stampBase64)}</div>`
+              ? `<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-4deg);width:260px;height:110px;pointer-events:none;z-index:80;">${stampImg(settings.stampBase64)}</div>`
               : ''}
             <div style="width:80%;height:1px;border-top:1.2px solid #333;margin-bottom:4px;position:relative;z-index:90;"></div>
             <div style="font-size:9px;font-weight:700;color:#333;position:relative;z-index:90;">Assinatura e Carimbo</div>
@@ -433,7 +433,7 @@ export async function generateQuotePDF(
           </div>
           <div style="width:45%;display:flex;flex-direction:column;align-items:center;position:relative;">
             ${settings.stampBase64
-              ? `<div style="position:absolute;right:30px;top:-10px;width:300px;height:160px;transform:rotate(-3deg);pointer-events:none;z-index:50;">${stampImg(settings.stampBase64)}</div>`
+              ? `<div style="position:absolute;right:30px;top:-10px;width:260px;height:110px;transform:rotate(-3deg);pointer-events:none;z-index:50;">${stampImg(settings.stampBase64)}</div>`
               : ''}
             <div style="width:100%;border-top:1.5px solid #000;text-align:center;padding-top:6px;font-size:13px;font-weight:bold;color:#000;margin-top:70px;">Assinatura e Carimbo</div>
           </div>
@@ -601,7 +601,7 @@ export async function generateReceiptPDF(
             <div style="display:table-cell;width:45%;text-align:center;vertical-align:bottom;padding-bottom:5px;">
               <div style="display:inline-block;width:240px;border:1.5px dashed #777;padding:14px 12px 6px 12px;text-align:center;background:#fafafa;position:relative;overflow:visible;">
                 ${settings.stampBase64
-                  ? `<div style="position:absolute;left:50%;top:-45px;transform:translateX(-50%) rotate(-3deg);width:320px;height:170px;pointer-events:none;z-index:50;">${stampImg(settings.stampBase64)}</div>`
+                  ? `<div style="position:absolute;left:50%;top:-45px;transform:translateX(-50%) rotate(-3deg);width:260px;height:110px;pointer-events:none;z-index:50;">${stampImg(settings.stampBase64)}</div>`
                   : ''}
                 <div style="border-top:1.5px solid #333;padding-top:5px;font-size:8.5pt;font-weight:bold;color:#333;text-transform:capitalize;">Assinatura e Carimbo</div>
               </div>
