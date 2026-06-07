@@ -9,8 +9,8 @@ export async function downloadReceiptPDF(receipt: Receipt) {
   container.style.position = 'fixed';
   container.style.top = '-10000px';
   container.style.left = '-10000px';
-  container.style.width = '842px';  // A5 Landscape width in pixels at standard high-def scale
-  container.style.height = '595px'; // A5 Landscape height in pixels
+  container.style.width = '1684px';  // A5 Landscape width in pixels at standard high-def scale
+  container.style.height = '1190px'; // A5 Landscape height in pixels
   container.style.backgroundColor = '#ffffff';
   container.style.padding = '20px';
   container.style.boxSizing = 'border-box';
@@ -454,7 +454,7 @@ export async function downloadReceiptPDF(receipt: Receipt) {
                             <div class="signature-line-text">Assinatura e Carimbo</div>
 
                             <!-- OVERLAY CARIMBO IMAGE -->
-                            <div style="position: absolute; left: 50%; top: -50px; transform: translateX(-50%) rotate(-3deg); width: 200px; height: 105px; pointer-events: none; z-index: 50;">
+                            <div style="position: absolute; left: 50%; top: -50px; transform: translateX(-50%) rotate(-3deg); width: 800px; height: 420px; pointer-events: none; z-index: 50;">
                                 <img src="/carrimbo.webp" alt="Carimbo e Assinatura" style="width: 100%; height: 100%; display: block;" />
                             </div>
                         </div>

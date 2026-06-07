@@ -9,8 +9,8 @@ export async function downloadInvoicePDF(invoice: Invoice, qty = 1, unitPrice = 
   container.style.position = 'fixed';
   container.style.top = '-10000px';
   container.style.left = '-10000px';
-  container.style.width = '1000px';
-  container.style.height = '705px';
+  container.style.width = '2000px';
+  container.style.height = '1410px';
   container.style.backgroundColor = '#ffffff';
   container.style.fontFamily = '"Arial", sans-serif';
   container.style.padding = '18px';
@@ -161,7 +161,7 @@ export async function downloadInvoicePDF(invoice: Invoice, qty = 1, unitPrice = 
           </div>
 
           <!-- CARIMBO IMAGE OVERLAY -->
-          <div style="position: absolute; right: 46px; bottom: -15px; width: 250px; height: 115px; transform: rotate(-4deg); pointer-events: none; z-index: 80;">
+          <div style="position: absolute; right: 46px; bottom: -15px; width: 1000px; height: 460px; transform: rotate(-4deg); pointer-events: none; z-index: 80;">
             <img src="/carrimbo.webp" alt="Carimbo e Assinatura" style="width: 100%; height: 100%;  display: block;" />
           </div>
 

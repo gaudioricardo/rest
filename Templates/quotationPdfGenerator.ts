@@ -10,8 +10,8 @@ export async function downloadQuotationPDF(quote: Quotation) {
   container.style.position = 'fixed';
   container.style.top = '-10000px';
   container.style.left = '-10000px';
-  container.style.width = '840px'; 
-  container.style.height = '1140px'; 
+  container.style.width = '1680px'; 
+  container.style.height = '2280px'; 
   container.style.backgroundColor = '#ffffff';
   container.style.fontFamily = '"Helvetica Neue", Helvetica, Arial, sans-serif';
   container.style.padding = '35px';
@@ -222,7 +222,7 @@ export async function downloadQuotationPDF(quote: Quotation) {
             </div>
 
             <!-- OVERLAY CARIMBO IMAGE -->
-            <div style="position: absolute; right: 40px; top: -2px; width: 200px; height: 105px; transform: rotate(-3deg); pointer-events: none; z-index: 50;">
+            <div style="position: absolute; right: 40px; top: -2px; width: 800px; height: 420px; transform: rotate(-3deg); pointer-events: none; z-index: 50;">
               <img src="/carrimbo.webp" alt="Carimbo e Assinatura" style="width: 100%; height: 100%;  display: block;" />
             </div>
           </div>
