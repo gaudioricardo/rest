@@ -1,0 +1,84 @@
+{
+  "expo": {
+    "name": "Ugest ERP",
+    "slug": "ugest-erp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/Logo.webp",
+    "userInterfaceStyle": "automatic",
+    "scheme": "ugest",
+    "splash": {
+      "image": "./assets/Logo_extended.webp",
+      "resizeMode": "contain",
+      "backgroundColor": "#0c1c48"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "co.mz.ugest.erp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Para fotografar recibos de despesas e o logótipo da empresa.",
+        "NSPhotoLibraryUsageDescription": "Para seleccionar o logótipo e carimbo da empresa.",
+        "NSFaceIDUsageDescription": "Para acesso rápido e seguro à aplicação.",
+        "NSLocalNetworkUsageDescription": "Para comunicação com o servidor Supabase em redes locais."
+      }
+    },
+    "android": {
+      "package": "co.mz.ugest.erp",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/Logo.webp",
+        "backgroundColor": "#0c1c48"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/Logo.webp"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/Logo.webp",
+          "color": "#0c1c48"
+        }
+      ],
+      "expo-local-authentication",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Para seleccionar logótipo e carimbo da empresa.",
+          "cameraPermission": "Para fotografar recibos de despesas."
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": []
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "ugest-erp-mobile"
+      }
+    }
+  }
+}
