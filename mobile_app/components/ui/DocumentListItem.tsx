@@ -1,53 +1,99 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { Badge, statusToBadgeVariant } from './Badge';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Colors, Spacing, Radius, FontSize } from '../../shared/theme';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { Badge, type BadgeVariant } from './Badge';
 
-interface DocumentListItemProps {
-  prefix: string;          // 'INV' | 'QT' | 'REC'
-  number: string;          // 'INV-0042'
+interface Props {
+  number: string;
   client: string;
-  date: string;            // formatted
-  amount: number;
-  status: string;
-  statusPt: string;
+  initials: string;
+  avatarColor: string;
+  date: string;
+  amount: string;
+  statusLabel: string;
+  statusVariant: BadgeVariant;
   onPress: () => void;
+  onLongPress?: () => void;
 }
 
-function formatMZN(v: number) {
-  return v.toLocaleString('pt-MZ', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' MZN';
-}
-
-const prefixColors: Record<string, string> = {
-  INV: '#0c1c48', QT: '#805522', REC: '#065f46', EXP: '#7c3aed',
-};
-
-export function DocumentListItem({ prefix, number, client, date, amount, status, statusPt, onPress }: DocumentListItemProps) {
-  const lang = useSettingsStore(s => s.language);
-  const displayStatus = lang === 'pt' ? statusPt : status;
-  const variant = statusToBadgeVariant(status);
-  const color = prefixColors[prefix] ?? '#0c1c48';
+export const DocumentListItem: React.FC<Props> = ({
+  number, client, initials, avatarColor, date, amount,
+  statusLabel, statusVariant, onPress, onLongPress,
+}) => {
+  const dark = useSettingsStore((s) => s.darkMode);
+  const palette = dark ? Colors.dark : Colors.light;
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 mb-2 border border-gray-100 dark:border-gray-700 flex-row items-center gap-3"
-      activeOpacity={0.75}
+      onLongPress={onLongPress}
+      activeOpacity={0.8}
+      style={[styles.item, { backgroundColor: palette.card, borderColor: palette.border }]}
     >
-      <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: color + '18' }}>
-        <Text className="text-xs font-inter-extrabold" style={{ color }}>{prefix}</Text>
+      <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+        <Text style={styles.initials}>{initials}</Text>
       </View>
-      <View className="flex-1">
-        <View className="flex-row items-center gap-2 mb-0.5">
-          <Text className="font-inter-bold text-gray-900 dark:text-white text-sm">{number}</Text>
-          <Badge label={displayStatus} variant={variant} size="sm" />
+      <View style={styles.main}>
+        <View style={styles.row}>
+          <Text style={[styles.number, { color: palette.textSecondary }]}>{number}</Text>
+          <Text style={[styles.amount, { color: palette.text }]}>{amount}</Text>
         </View>
-        <Text className="text-gray-500 dark:text-gray-400 text-xs font-inter" numberOfLines={1}>{client}</Text>
-      </View>
-      <View className="items-end">
-        <Text className="font-inter-bold text-gray-900 dark:text-white text-sm">{formatMZN(amount)}</Text>
-        <Text className="text-gray-400 text-xs font-inter mt-0.5">{date}</Text>
+        <Text style={[styles.client, { color: palette.text }]} numberOfLines={1}>{client}</Text>
+        <View style={styles.row}>
+          <Text style={[styles.date, { color: palette.textMuted }]}>{date}</Text>
+          <Badge label={statusLabel} variant={statusVariant} />
+        </View>
       </View>
     </TouchableOpacity>
   );
-}
+};
+
+const styles = StyleSheet.create({
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+    gap: Spacing.md,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  initials: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: FontSize.sm,
+  },
+  main: {
+    flex: 1,
+    gap: 2,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  number: {
+    fontSize: FontSize.xs,
+    fontWeight: '500',
+  },
+  client: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
+  },
+  date: {
+    fontSize: FontSize.xs,
+  },
+  amount: {
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+  },
+});

@@ -1,58 +1,159 @@
-import '../global.css';
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import {
-  useFonts,
-  Montserrat_700Bold,
-  Montserrat_800ExtraBold,
-} from '@expo-google-fonts/montserrat';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_700Bold,
-  Inter_800ExtraBold,
-} from '@expo-google-fonts/inter';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { useFonts, PlayfairDisplay_400Regular, PlayfairDisplay_600SemiBold, PlayfairDisplay_700Bold, PlayfairDisplay_400Regular_Italic } from '@expo-google-fonts/playfair-display';
 import * as SplashScreen from 'expo-splash-screen';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { ToastProvider } from '../components/ui/ToastContainer';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const initAuth = useAuthStore(s => s.init);
-  const initSettings = useSettingsStore(s => s.init);
+const DOT_COUNT = 4;
 
-  const [fontsLoaded] = useFonts({
-    Montserrat_700Bold,
-    Montserrat_800ExtraBold,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_700Bold,
-    Inter_800ExtraBold,
+function Preloader({ onDone }: { onDone: () => void }) {
+  const dots = Array.from({ length: DOT_COUNT }, (_, i) => {
+    const anim = React.useRef(new Animated.Value(0)).current;
+    return { anim };
   });
 
   useEffect(() => {
-    initAuth();
-    initSettings();
+    const animations = dots.map(({ anim }, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 120),
+          Animated.timing(anim, { toValue: -10, duration: 300, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.delay((DOT_COUNT - i) * 120),
+        ])
+      )
+    );
+    animations.forEach((a) => a.start());
+
+    const timer = setTimeout(onDone, 3500);
+    return () => {
+      timer && clearTimeout(timer);
+      animations.forEach((a) => a.stop());
+    };
   }, []);
 
+  return (
+    <View style={styles.preloader}>
+      <Text style={styles.logo}>Rest</Text>
+      <Text style={styles.tagline}>Where growth finds space</Text>
+      <View style={styles.dotsRow}>
+        {dots.map(({ anim }, i) => (
+          <Animated.View
+            key={i}
+            style={[styles.dot, { transform: [{ translateY: anim }] }]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const segments = useSegments();
+  const userId = useAuthStore((s) => s.userId);
+  const authLoading = useAuthStore((s) => s.loading);
+
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync();
+    if (authLoading) return;
+    const inApp = segments[0] === '(app)';
+    const inAuth = segments[0] === '(auth)';
+
+    if (!userId && inApp) {
+      router.replace('/(auth)/login');
+    } else if (userId && inAuth) {
+      router.replace('/(app)/(tabs)/');
+    }
+  }, [userId, authLoading, segments]);
+
+  return <>{children}</>;
+}
+
+export default function RootLayout() {
+  const [showPreloader, setShowPreloader] = useState(true);
+  const { init: initAuth } = useAuthStore();
+  const { initPrefs } = useSettingsStore();
+
+  const [fontsLoaded] = useFonts({
+    PlayfairDisplay_400Regular,
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_700Bold,
+    PlayfairDisplay_400Regular_Italic,
+  });
+
+  useEffect(() => {
+    const setup = async () => {
+      await initPrefs();
+      await initAuth();
+      if (fontsLoaded) {
+        await SplashScreen.hideAsync();
+      }
+    };
+    setup();
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || showPreloader) {
+    return (
+      <Preloader
+        onDone={() => {
+          if (fontsLoaded) setShowPreloader(false);
+        }}
+      />
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(app)" />
-      </Stack>
+      <SafeAreaProvider>
+        <ToastProvider>
+          <AuthGuard>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(app)" />
+            </Stack>
+          </AuthGuard>
+        </ToastProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  preloader: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  logo: {
+    fontFamily: 'PlayfairDisplay_700Bold',
+    fontSize: 48,
+    color: '#0c1c48',
+    letterSpacing: 2,
+  },
+  tagline: {
+    fontFamily: 'PlayfairDisplay_400Regular_Italic',
+    fontSize: 18,
+    color: '#805522',
+    letterSpacing: 0.5,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#805522',
+  },
+});

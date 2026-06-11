@@ -1,19 +1,33 @@
 import React from 'react';
-import { View, ViewStyle } from 'react-native';
+import { View, ViewProps, StyleSheet } from 'react-native';
+import { Colors, Radius, Shadow, Spacing } from '../../shared/theme';
+import { useSettingsStore } from '../../stores/settingsStore';
 
-interface CardProps {
-  children: React.ReactNode;
-  className?: string;
-  style?: ViewStyle;
+interface Props extends ViewProps {
+  elevated?: boolean;
+  padding?: number;
 }
 
-export function Card({ children, className = '', style }: CardProps) {
+export const Card: React.FC<Props> = ({ elevated = true, padding = Spacing.md, style, ...props }) => {
+  const dark = useSettingsStore((s) => s.darkMode);
+  const palette = dark ? Colors.dark : Colors.light;
+
   return (
     <View
-      className={`bg-white dark:bg-ugest-dark-surface rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 ${className}`}
-      style={style}
-    >
-      {children}
-    </View>
+      style={[
+        styles.card,
+        { backgroundColor: palette.card, borderColor: palette.border, padding },
+        elevated && Shadow.md,
+        style,
+      ]}
+      {...props}
+    />
   );
-}
+};
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+});

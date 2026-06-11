@@ -1,159 +1,190 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity, RefreshControl,
-  Alert, TextInput, ActivityIndicator,
-} from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../../stores/authStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { fetchStock, fetchExpenses } from '../../../shared/db';
-import { StockItem, Expense } from '../../../shared/types';
-import { Badge, statusToBadgeVariant } from '../../../components/ui/Badge';
-import { supabase } from '../../../lib/supabase';
+import { Colors, Spacing, FontSize, Radius } from '../../../shared/theme';
+import { tr } from '../../../shared/i18n';
 
-type Section = 'menu' | 'stock' | 'expenses';
+interface MenuItemProps {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  color?: string;
+  badge?: string;
+}
 
-export default function MoreScreen() {
-  const user = useAuthStore(s => s.user);
-  const { signOut } = useAuthStore();
-  const company = useSettingsStore(s => s.company);
-
-  const [section, setSection] = useState<Section>('menu');
-  const [stock, setStock] = useState<StockItem[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const loadSection = async (s: Section) => {
-    if (!user) return;
-    setLoading(true);
-    setSection(s);
-    if (s === 'stock') setStock(await fetchStock(user.id));
-    if (s === 'expenses') setExpenses(await fetchExpenses(user.id));
-    setLoading(false);
-  };
-
-  const menuItems = [
-    { icon: 'package' as const, label: 'Inventário', sub: `${stock.length} itens`, onPress: () => loadSection('stock') },
-    { icon: 'shopping-bag' as const, label: 'Despesas', sub: 'Ver e registar despesas', onPress: () => loadSection('expenses') },
-    { icon: 'message-circle' as const, label: 'Chat Hub', sub: 'Comunicar com clientes', onPress: () => router.push('/(app)/(tabs)/chat') },
-    { icon: 'settings' as const, label: 'Configurações', sub: 'Empresa, tema, idioma', onPress: () => router.push('/(app)/settings') },
-    { icon: 'log-out' as const, label: 'Terminar sessão', sub: '', onPress: () => {
-      Alert.alert('Sair', 'Tem a certeza?', [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sair', style: 'destructive', onPress: signOut },
-      ]);
-    }},
-  ];
-
-  if (section === 'stock') return (
-    <SafeAreaView className="flex-1 bg-ugest-background dark:bg-ugest-dark-background" edges={['top']}>
-      <View className="flex-row items-center px-4 pt-2 pb-4 gap-3">
-        <TouchableOpacity onPress={() => setSection('menu')} className="p-1">
-          <Feather name="arrow-left" size={22} color="#0c1c48" />
-        </TouchableOpacity>
-        <Text className="text-xl font-montserrat text-primary-950 dark:text-white">Inventário</Text>
-      </View>
-      <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => loadSection('stock')} tintColor="#0c1c48" />}
-      >
-        {stock.map(item => (
-          <View key={item.id} className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-2 border border-gray-100 dark:border-gray-700">
-            <View className="flex-row items-start justify-between mb-2">
-              <View className="flex-1">
-                <Text className="font-inter-bold text-gray-900 dark:text-white">{item.name}</Text>
-                <Text className="text-xs font-inter text-gray-400">SKU: {item.sku}</Text>
-              </View>
-              <Badge label={item.statusPt} variant={statusToBadgeVariant(item.status)} />
-            </View>
-            <View className="flex-row justify-between">
-              <Text className="text-sm font-inter text-gray-600 dark:text-gray-300">
-                {item.stockLevel} / {item.maxStock} unidades
-              </Text>
-              <Text className="text-sm font-inter-bold text-primary-950 dark:text-primary-200">
-                {item.price.toLocaleString('pt-MZ')} MZN
-              </Text>
-            </View>
-            <View className="mt-2 h-1.5 bg-gray-100 dark:bg-gray-600 rounded-full overflow-hidden">
-              <View
-                className={`h-full rounded-full ${item.status === 'Out of Stock' ? 'bg-red-500' : item.status === 'Low Stock' ? 'bg-orange-400' : 'bg-emerald-500'}`}
-                style={{ width: `${Math.min(100, (item.stockLevel / item.maxStock) * 100)}%` }}
-              />
-            </View>
-          </View>
-        ))}
-        <View className="h-8" />
-      </ScrollView>
-    </SafeAreaView>
-  );
-
-  if (section === 'expenses') return (
-    <SafeAreaView className="flex-1 bg-ugest-background dark:bg-ugest-dark-background" edges={['top']}>
-      <View className="flex-row items-center px-4 pt-2 pb-4 gap-3">
-        <TouchableOpacity onPress={() => setSection('menu')} className="p-1">
-          <Feather name="arrow-left" size={22} color="#0c1c48" />
-        </TouchableOpacity>
-        <Text className="text-xl font-montserrat text-primary-950 dark:text-white">Despesas</Text>
-      </View>
-      <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => loadSection('expenses')} tintColor="#0c1c48" />}
-      >
-        {expenses.map(exp => (
-          <View key={exp.id} className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-2 border border-gray-100 dark:border-gray-700">
-            <View className="flex-row items-start justify-between">
-              <View className="flex-1">
-                <Text className="font-inter-bold text-gray-900 dark:text-white">{exp.merchant}</Text>
-                <Text className="text-xs font-inter text-gray-400">{exp.ref} · {exp.categoryPt}</Text>
-                <Text className="text-xs font-inter text-gray-400">{exp.datePt}</Text>
-              </View>
-              <View className="items-end gap-1">
-                <Text className="font-inter-bold text-red-600 dark:text-red-400">
-                  {exp.amount.toLocaleString('pt-MZ', { minimumFractionDigits: 2 })} MZN
-                </Text>
-                <Badge label={exp.statusPt} variant={statusToBadgeVariant(exp.status)} size="sm" />
-              </View>
-            </View>
-          </View>
-        ))}
-        <View className="h-8" />
-      </ScrollView>
-    </SafeAreaView>
-  );
+const MenuItem: React.FC<MenuItemProps> = ({ icon, label, onPress, color = Colors.primary, badge }) => {
+  const dark = useSettingsStore((s) => s.darkMode);
+  const palette = dark ? Colors.dark : Colors.light;
 
   return (
-    <SafeAreaView className="flex-1 bg-ugest-background dark:bg-ugest-dark-background" edges={['top']}>
-      <View className="px-4 pt-2 pb-4">
-        <Text className="text-2xl font-montserrat text-primary-950 dark:text-white">Mais</Text>
-        {company && (
-          <Text className="text-sm font-inter text-gray-500 dark:text-gray-400 mt-0.5">{company.companyName}</Text>
-        )}
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={[styles.menuItem, { borderBottomColor: palette.border }]}
+    >
+      <View style={[styles.iconBox, { backgroundColor: color + '18' }]}>
+        <Ionicons name={icon as any} size={20} color={color} />
+      </View>
+      <Text style={[styles.menuLabel, { color: palette.text }]}>{label}</Text>
+      {badge && (
+        <View style={[styles.badge, { backgroundColor: color }]}>
+          <Text style={styles.badgeText}>{badge}</Text>
+        </View>
+      )}
+      <Ionicons name="chevron-forward" size={16} color={palette.textMuted} />
+    </TouchableOpacity>
+  );
+};
+
+export default function MoreScreen() {
+  const router = useRouter();
+  const { signOut, userEmail, userName } = useAuthStore();
+  const { language, setLanguage, darkMode, setDarkMode } = useSettingsStore();
+  const palette = darkMode ? Colors.dark : Colors.light;
+  const lang = language;
+
+  return (
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <View style={[styles.header, { backgroundColor: palette.card, borderBottomColor: palette.border }]}>
+        <Text style={[styles.title, { color: palette.text }]}>{tr(lang, 'more')}</Text>
       </View>
 
-      <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false}>
-        <View className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden mb-4">
-          {menuItems.map((item, i) => (
-            <TouchableOpacity
-              key={item.label}
-              onPress={item.onPress}
-              className={`flex-row items-center gap-4 px-4 py-4 ${i < menuItems.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}
-              activeOpacity={0.7}
-            >
-              <View className={`w-10 h-10 rounded-xl items-center justify-center ${item.label === 'Terminar sessão' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-primary-50 dark:bg-primary-900/30'}`}>
-                <Feather name={item.icon} size={18} color={item.label === 'Terminar sessão' ? '#ef4444' : '#0c1c48'} />
-              </View>
-              <View className="flex-1">
-                <Text className={`font-inter-medium ${item.label === 'Terminar sessão' ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-100'}`}>
-                  {item.label}
-                </Text>
-                {item.sub ? <Text className="text-xs font-inter text-gray-400 mt-0.5">{item.sub}</Text> : null}
-              </View>
-              {item.label !== 'Terminar sessão' && <Feather name="chevron-right" size={16} color="#9ca3af" />}
-            </TouchableOpacity>
-          ))}
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* User Info */}
+        <View style={[styles.userCard, { backgroundColor: palette.card }]}>
+          <View style={[styles.userAvatar, { backgroundColor: Colors.primary }]}>
+            <Text style={styles.userInitials}>
+              {(userName ?? userEmail ?? 'U').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          <View>
+            <Text style={[styles.userName, { color: palette.text }]}>{userName ?? 'Utilizador'}</Text>
+            <Text style={[styles.userEmail, { color: palette.textMuted }]}>{userEmail}</Text>
+          </View>
         </View>
-        <View className="h-8" />
+
+        {/* Section: Management */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>
+          {lang === 'pt' ? 'GESTÃO' : 'MANAGEMENT'}
+        </Text>
+        <View style={[styles.group, { backgroundColor: palette.card }]}>
+          <MenuItem
+            icon="cube-outline"
+            label={tr(lang, 'stock')}
+            onPress={() => router.push('/(app)/stock/list' as any)}
+            color={Colors.primary}
+          />
+          <MenuItem
+            icon="wallet-outline"
+            label={tr(lang, 'expenses')}
+            onPress={() => router.push('/(app)/expense/list' as any)}
+            color={Colors.secondary}
+          />
+          <MenuItem
+            icon="person-outline"
+            label={tr(lang, 'contacts')}
+            onPress={() => router.push('/(app)/contact/list' as any)}
+            color="#0369a1"
+          />
+        </View>
+
+        {/* Section: Preferences */}
+        <Text style={[styles.section, { color: palette.textMuted }]}>
+          {lang === 'pt' ? 'PREFERÊNCIAS' : 'PREFERENCES'}
+        </Text>
+        <View style={[styles.group, { backgroundColor: palette.card }]}>
+          <View style={[styles.menuItem, { borderBottomColor: palette.border }]}>
+            <View style={[styles.iconBox, { backgroundColor: Colors.primary + '18' }]}>
+              <Ionicons name="moon-outline" size={20} color={Colors.primary} />
+            </View>
+            <Text style={[styles.menuLabel, { color: palette.text, flex: 1 }]}>
+              {tr(lang, 'darkMode')}
+            </Text>
+            <Switch
+              value={darkMode}
+              onValueChange={setDarkMode}
+              trackColor={{ true: Colors.primary, false: palette.border }}
+            />
+          </View>
+          <View style={[styles.menuItem, { borderBottomColor: palette.border }]}>
+            <View style={[styles.iconBox, { backgroundColor: Colors.secondary + '18' }]}>
+              <Ionicons name="language-outline" size={20} color={Colors.secondary} />
+            </View>
+            <Text style={[styles.menuLabel, { color: palette.text, flex: 1 }]}>
+              {tr(lang, 'language')}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setLanguage(lang === 'pt' ? 'en' : 'pt')}
+              style={[styles.langToggle, { borderColor: palette.border }]}
+            >
+              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 13 }}>
+                {lang === 'pt' ? 'PT' : 'EN'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <MenuItem
+            icon="settings-outline"
+            label={tr(lang, 'settings')}
+            onPress={() => router.push('/(app)/settings/index')}
+            color="#0369a1"
+          />
+        </View>
+
+        {/* Sign Out */}
+        <View style={[styles.group, { backgroundColor: palette.card, marginTop: Spacing.md }]}>
+          <MenuItem
+            icon="log-out-outline"
+            label={lang === 'pt' ? 'Terminar Sessão' : 'Sign Out'}
+            onPress={signOut}
+            color={Colors.error}
+          />
+        </View>
+
+        <Text style={[styles.version, { color: palette.textMuted }]}>
+          Rest ERP v1.0 · Processado por Computador
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+  header: {
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, borderBottomWidth: 1,
+  },
+  title: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: FontSize.xl, fontWeight: '700' },
+  userCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    margin: Spacing.md, padding: Spacing.md, borderRadius: Radius.lg,
+  },
+  userAvatar: {
+    width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center',
+  },
+  userInitials: { color: '#fff', fontWeight: '700', fontSize: 22 },
+  userName: { fontWeight: '700', fontSize: FontSize.md },
+  userEmail: { fontSize: FontSize.sm, marginTop: 2 },
+  section: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 1,
+    marginHorizontal: Spacing.md, marginTop: Spacing.lg, marginBottom: 6,
+  },
+  group: { marginHorizontal: Spacing.md, borderRadius: Radius.lg, overflow: 'hidden' },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 14, paddingHorizontal: Spacing.md, borderBottomWidth: 0.5,
+  },
+  iconBox: { width: 36, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  menuLabel: { flex: 1, fontSize: FontSize.base, fontWeight: '500' },
+  badge: {
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
+  },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  langToggle: {
+    borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  version: { textAlign: 'center', fontSize: 11, marginTop: 24 },
+});

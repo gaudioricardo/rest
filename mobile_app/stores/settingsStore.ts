@@ -1,51 +1,67 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CompanySettings } from '../shared/types';
-import { fetchCompanySettings } from '../shared/db';
-
-type Language = 'pt' | 'en';
+import type { CompanySettings, Language } from '../shared/types';
+import { getCompanySettings, saveCompanySettings } from '../lib/db';
 
 interface SettingsState {
   company: CompanySettings | null;
   language: Language;
-  biometricEnabled: boolean;
+  darkMode: boolean;
   loading: boolean;
-  loadCompany: (userId: string) => Promise<void>;
-  setLanguage: (lang: Language) => void;
-  setBiometric: (enabled: boolean) => void;
-  init: () => Promise<void>;
+  loadSettings: (userId: string) => Promise<void>;
+  saveSettings: (userId: string, settings: Partial<CompanySettings>) => Promise<void>;
+  setLanguage: (lang: Language) => Promise<void>;
+  setDarkMode: (dark: boolean) => Promise<void>;
+  initPrefs: () => Promise<void>;
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+const DEFAULT_COMPANY: CompanySettings = {
+  companyName: '',
+  nuit: '',
+  address: '',
+  city: '',
+  phone: '',
+  email: '',
+  bankAccounts: [],
+  mobileContacts: [],
+  setupComplete: false,
+};
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   company: null,
   language: 'pt',
-  biometricEnabled: false,
+  darkMode: false,
   loading: false,
 
-  loadCompany: async (userId) => {
+  initPrefs: async () => {
+    const lang = await AsyncStorage.getItem('rest_lang');
+    const dark = await AsyncStorage.getItem('rest_dark');
+    set({
+      language: (lang as Language) ?? 'pt',
+      darkMode: dark === 'true',
+    });
+  },
+
+  loadSettings: async (userId) => {
     set({ loading: true });
-    const company = await fetchCompanySettings(userId);
-    set({ company, loading: false });
+    const cs = await getCompanySettings(userId);
+    set({ company: cs ?? DEFAULT_COMPANY, loading: false });
+  },
+
+  saveSettings: async (userId, settings) => {
+    const current = get().company ?? DEFAULT_COMPANY;
+    const merged = { ...current, ...settings };
+    await saveCompanySettings(userId, merged);
+    set({ company: merged });
   },
 
   setLanguage: async (lang) => {
+    await AsyncStorage.setItem('rest_lang', lang);
     set({ language: lang });
-    await AsyncStorage.setItem('ugest_language', lang);
   },
 
-  setBiometric: async (enabled) => {
-    set({ biometricEnabled: enabled });
-    await AsyncStorage.setItem('ugest_biometric', enabled ? '1' : '0');
-  },
-
-  init: async () => {
-    const [lang, bio] = await Promise.all([
-      AsyncStorage.getItem('ugest_language'),
-      AsyncStorage.getItem('ugest_biometric'),
-    ]);
-    set({
-      language: (lang as Language) ?? 'pt',
-      biometricEnabled: bio === '1',
-    });
+  setDarkMode: async (dark) => {
+    await AsyncStorage.setItem('rest_dark', String(dark));
+    set({ darkMode: dark });
   },
 }));

@@ -1,95 +1,148 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, RefreshControl, Alert, SectionList } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useClientStore } from '../../../stores/clientStore';
-import { useAuthStore } from '../../../stores/authStore';
-import { useRealtimeClients } from '../../../hooks/useRealtimeClients';
-import { ChatClientCard } from '../../../components/chat/ChatClientCard';
-import { CardSkeleton } from '../../../components/ui/SkeletonLoader';
-import { DebtClient } from '../../../shared/types';
-import { hapticSuccess } from '../../../lib/haptics';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useDataStore } from '../../../stores/dataStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { Colors, Spacing, FontSize, Radius } from '../../../shared/theme';
+import { tr } from '../../../shared/i18n';
+import { Badge } from '../../../components/ui/Badge';
+import { getAvatarColor, getInitials } from '../../../shared/theme';
 
 export default function ClientsScreen() {
-  useRealtimeClients();
-  const user = useAuthStore(s => s.user);
-  const { clients, loading, loadClients, markSettled } = useClientStore();
+  const router = useRouter();
+  const { language, darkMode } = useSettingsStore();
+  const { debtClients } = useDataStore();
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'All' | 'Pendente' | 'Liquidado'>('All');
 
-  const sections = useMemo(() => {
-    const pending = clients.filter(c => c.status === 'Pendente');
-    const settled = clients.filter(c => c.status === 'Liquidado');
-    return [
-      ...(pending.length ? [{ title: 'Pendentes', data: pending }] : []),
-      ...(settled.length ? [{ title: 'Liquidados', data: settled }] : []),
-    ];
-  }, [clients]);
+  const palette = darkMode ? Colors.dark : Colors.light;
+  const lang = language;
 
-  const handleSettle = (client: DebtClient) => {
-    Alert.alert(
-      'Liquidar cliente',
-      `Marcar ${client.fullName} como Liquidado?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Liquidar', style: 'destructive',
-          onPress: async () => {
-            await markSettled(client.id, user?.id ?? '');
-            hapticSuccess();
-          },
-        },
-      ]
-    );
-  };
+  const filtered = debtClients.filter((c) => {
+    const matchSearch = c.fullName.toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filter === 'All' || c.status === filter;
+    return matchSearch && matchFilter;
+  });
+
+  const filters = [
+    { key: 'All', label: lang === 'pt' ? 'Todos' : 'All' },
+    { key: 'Pendente', label: 'Pendente' },
+    { key: 'Liquidado', label: 'Liquidado' },
+  ];
 
   return (
-    <SafeAreaView className="flex-1 bg-ugest-background dark:bg-ugest-dark-background" edges={['top']}>
-      <View className="px-4 pt-2 pb-2">
-        <Text className="text-2xl font-montserrat text-primary-950 dark:text-white">Clientes</Text>
-        <Text className="text-sm font-inter text-gray-500 dark:text-gray-400 mt-0.5">
-          {clients.filter(c => c.status === 'Pendente').length} pendentes
-        </Text>
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <View style={[styles.header, { backgroundColor: palette.card, borderBottomColor: palette.border }]}>
+        <Text style={[styles.title, { color: palette.text }]}>{tr(lang, 'clients')}</Text>
+        <TouchableOpacity
+          style={[styles.newBtn, { backgroundColor: Colors.primary }]}
+          onPress={() => router.push('/(app)/client/new')}
+        >
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.newBtnText}>{tr(lang, 'newClient')}</Text>
+        </TouchableOpacity>
       </View>
 
-      {loading && !clients.length
-        ? (
-          <ScrollView className="flex-1 px-4">
-            {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
-          </ScrollView>
-        )
-        : clients.length === 0
-          ? (
-            <View className="flex-1 items-center justify-center">
-              <Text className="text-gray-400 font-inter text-base">Nenhum cliente registado</Text>
+      <View style={[styles.searchBar, { backgroundColor: palette.surface, borderBottomColor: palette.border }]}>
+        <Ionicons name="search-outline" size={16} color={palette.textMuted} />
+        <TextInput
+          style={[styles.searchInput, { color: palette.text }]}
+          placeholder={tr(lang, 'search')}
+          placeholderTextColor={palette.textMuted}
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+
+      <View style={[styles.filters, { borderBottomColor: palette.border }]}>
+        {filters.map((f) => (
+          <TouchableOpacity
+            key={f.key}
+            onPress={() => setFilter(f.key as any)}
+            style={[
+              styles.pill,
+              filter === f.key
+                ? { backgroundColor: Colors.primary }
+                : { backgroundColor: palette.surface, borderColor: palette.border, borderWidth: 1 },
+            ]}
+          >
+            <Text style={{ color: filter === f.key ? '#fff' : palette.textSecondary, fontSize: 12, fontWeight: '600' }}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <Text style={[styles.empty, { color: palette.textMuted }]}>{tr(lang, 'noData')}</Text>
+        }
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={() => router.push(`/(app)/client/${item.id}`)}
+            style={[styles.clientCard, { backgroundColor: palette.card, borderColor: palette.border }]}
+          >
+            <View style={[styles.avatar, { backgroundColor: getAvatarColor(item.fullName) }]}>
+              <Text style={styles.initials}>{getInitials(item.fullName)}</Text>
             </View>
-          )
-          : (
-            <SectionList
-              className="flex-1 px-4"
-              sections={sections}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <ChatClientCard client={item} onSettle={item.status === 'Pendente' ? handleSettle : undefined} />
-              )}
-              renderSectionHeader={({ section: { title, data } }) => (
-                <View className="flex-row items-center gap-2 py-2">
-                  <Text className="font-inter-extrabold uppercase text-xs tracking-widest text-gray-500 dark:text-gray-400">
-                    {title}
-                  </Text>
-                  <View className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                  <Text className="text-xs text-gray-400 font-inter">{data.length}</Text>
-                </View>
-              )}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={() => user && loadClients(user.id)}
-                  tintColor="#0c1c48"
-                />
-              }
-              contentContainerStyle={{ paddingBottom: 32 }}
-              showsVerticalScrollIndicator={false}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.name, { color: palette.text }]}>{item.fullName}</Text>
+              {item.movitelNumber ? (
+                <Text style={[styles.info, { color: palette.textMuted }]}>
+                  <Ionicons name="call-outline" size={11} /> {item.movitelNumber}
+                </Text>
+              ) : null}
+              {item.address ? (
+                <Text style={[styles.info, { color: palette.textMuted }]} numberOfLines={1}>
+                  {item.address}
+                </Text>
+              ) : null}
+            </View>
+            <Badge
+              label={item.status}
+              variant={item.status === 'Liquidado' ? 'success' : 'warning'}
             />
-          )
-      }
+          </TouchableOpacity>
+        )}
+      />
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, borderBottomWidth: 1,
+  },
+  title: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: FontSize.xl, fontWeight: '700' },
+  newBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: Radius.md,
+  },
+  newBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: Spacing.md, paddingVertical: 10, borderBottomWidth: 1,
+  },
+  searchInput: { flex: 1, fontSize: FontSize.sm },
+  filters: { flexDirection: 'row', gap: 8, padding: Spacing.md, borderBottomWidth: 1 },
+  pill: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.full },
+  list: { padding: Spacing.md },
+  empty: { textAlign: 'center', marginTop: 48, fontSize: FontSize.sm },
+  clientCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: Spacing.md, borderRadius: Radius.lg, borderWidth: 1, marginBottom: Spacing.sm,
+  },
+  avatar: {
+    width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center',
+  },
+  initials: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  name: { fontWeight: '600', fontSize: FontSize.base },
+  info: { fontSize: 12, marginTop: 2 },
+});

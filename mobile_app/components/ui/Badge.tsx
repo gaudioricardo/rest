@@ -1,56 +1,59 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Colors, Radius } from '../../shared/theme';
 
-type BadgeVariant = 'paid' | 'pending' | 'overdue' | 'approved' | 'rejected' | 'liquidado' | 'low' | 'out';
+export type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'default';
 
-const styles: Record<BadgeVariant, string> = {
-  paid:      'bg-emerald-100 dark:bg-emerald-900',
-  pending:   'bg-amber-100 dark:bg-amber-900',
-  overdue:   'bg-red-100 dark:bg-red-900',
-  approved:  'bg-emerald-100 dark:bg-emerald-900',
-  rejected:  'bg-red-100 dark:bg-red-900',
-  liquidado: 'bg-blue-100 dark:bg-blue-900',
-  low:       'bg-orange-100 dark:bg-orange-900',
-  out:       'bg-red-100 dark:bg-red-900',
+const VARIANTS: Record<BadgeVariant, { bg: string; text: string }> = {
+  success: { bg: '#dcfce7', text: Colors.success },
+  warning: { bg: '#fef9c3', text: Colors.warning },
+  error: { bg: '#fee2e2', text: Colors.error },
+  info: { bg: '#e0f2fe', text: Colors.info },
+  default: { bg: '#f1f5f9', text: '#64748b' },
 };
 
-const textStyles: Record<BadgeVariant, string> = {
-  paid:      'text-emerald-800 dark:text-emerald-100',
-  pending:   'text-amber-800 dark:text-amber-100',
-  overdue:   'text-red-800 dark:text-red-100',
-  approved:  'text-emerald-800 dark:text-emerald-100',
-  rejected:  'text-red-800 dark:text-red-100',
-  liquidado: 'text-blue-800 dark:text-blue-100',
-  low:       'text-orange-800 dark:text-orange-100',
-  out:       'text-red-800 dark:text-red-100',
-};
-
-interface BadgeProps {
+interface Props {
   label: string;
-  variant: BadgeVariant;
-  size?: 'sm' | 'md';
+  variant?: BadgeVariant;
 }
 
-export function Badge({ label, variant, size = 'md' }: BadgeProps) {
+export const Badge: React.FC<Props> = ({ label, variant = 'default' }) => {
+  const { bg, text } = VARIANTS[variant];
   return (
-    <View className={`${styles[variant]} px-2 py-0.5 rounded-full`}>
-      <Text className={`${textStyles[variant]} font-inter-extrabold uppercase tracking-wide ${size === 'sm' ? 'text-[9px]' : 'text-[10px]'}`}>
-        {label}
-      </Text>
+    <View style={[styles.badge, { backgroundColor: bg }]}>
+      <Text style={[styles.text, { color: text }]}>{label}</Text>
     </View>
   );
-}
+};
 
-export function statusToBadgeVariant(status: string): BadgeVariant {
-  const map: Record<string, BadgeVariant> = {
-    Paid: 'paid', Pago: 'paid',
-    Pending: 'pending', Pendente: 'pending',
-    Overdue: 'overdue', Vencido: 'overdue',
-    Approved: 'approved', Aprovado: 'approved',
-    Rejected: 'rejected', Rejeitado: 'rejected',
-    Liquidado: 'liquidado',
-    'Low Stock': 'low', 'Stock Baixo': 'low',
-    'Out of Stock': 'out', 'Sem Stock': 'out',
-  };
-  return map[status] ?? 'pending';
-}
+export const getInvoiceVariant = (status: string): BadgeVariant => {
+  if (status === 'Paid' || status === 'Pago') return 'success';
+  if (status === 'Overdue' || status === 'Vencido') return 'error';
+  return 'warning';
+};
+
+export const getQuoteVariant = (status: string): BadgeVariant => {
+  if (status === 'Approved' || status === 'Aprovado') return 'success';
+  if (status === 'Rejected' || status === 'Rejeitado') return 'error';
+  if (status === 'Liquidado') return 'info';
+  return 'warning';
+};
+
+export const getStockVariant = (status: string): BadgeVariant => {
+  if (status === 'In Stock' || status === 'Em Stock') return 'success';
+  if (status === 'Out of Stock' || status === 'Sem Stock') return 'error';
+  return 'warning';
+};
+
+const styles = StyleSheet.create({
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    alignSelf: 'flex-start',
+  },
+  text: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+});

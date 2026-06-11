@@ -1,33 +1,72 @@
 import React from 'react';
-import { TouchableOpacity, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Card } from './Card';
+import { Colors, FontSize, Spacing } from '../../shared/theme';
+import { useSettingsStore } from '../../stores/settingsStore';
 
-interface KpiCardProps {
-  label: string;
+interface Props {
+  title: string;
   value: string;
-  sub?: string;
-  icon: keyof typeof Feather.glyphMap;
+  icon: string;
   iconColor?: string;
-  iconBg?: string;
-  onPress?: () => void;
+  change?: string;
+  positive?: boolean;
 }
 
-export function KpiCard({ label, value, sub, icon, iconColor = '#0c1c48', iconBg = '#e8ecf5', onPress }: KpiCardProps) {
+export const KpiCard: React.FC<Props> = ({
+  title, value, icon, iconColor = Colors.primary, change, positive,
+}) => {
+  const dark = useSettingsStore((s) => s.darkMode);
+  const palette = dark ? Colors.dark : Colors.light;
+
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      className="bg-white dark:bg-gray-800 rounded-2xl p-4 flex-1 border border-gray-100 dark:border-gray-700 active:scale-95"
-      activeOpacity={0.85}
-      disabled={!onPress}
-    >
-      <View className="flex-row items-center justify-between mb-3">
-        <View className="rounded-xl p-2" style={{ backgroundColor: iconBg }}>
-          <Feather name={icon} size={18} color={iconColor} />
+    <Card style={styles.card} padding={Spacing.md}>
+      <View style={styles.row}>
+        <View style={[styles.iconBox, { backgroundColor: iconColor + '18' }]}>
+          <Ionicons name={icon as any} size={22} color={iconColor} />
         </View>
+        {change && (
+          <Text style={[styles.change, { color: positive ? Colors.success : Colors.error }]}>
+            {change}
+          </Text>
+        )}
       </View>
-      <Text className="text-2xl font-inter-bold text-gray-900 dark:text-white mb-1" numberOfLines={1}>{value}</Text>
-      <Text className="text-xs font-inter-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</Text>
-      {sub && <Text className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{sub}</Text>}
-    </TouchableOpacity>
+      <Text style={[styles.value, { color: palette.text }]}>{value}</Text>
+      <Text style={[styles.title, { color: palette.textMuted }]}>{title}</Text>
+    </Card>
   );
-}
+};
+
+const styles = StyleSheet.create({
+  card: {
+    flex: 1,
+    minWidth: 140,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  change: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  value: {
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: FontSize.xs,
+    fontWeight: '500',
+  },
+});

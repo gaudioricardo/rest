@@ -1,42 +1,68 @@
 import { create } from 'zustand';
-import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 interface AuthState {
-  session: Session | null;
-  user: User | null;
+  userId: string | null;
+  userEmail: string | null;
+  userName: string | null;
   loading: boolean;
-  setSession: (session: Session | null) => void;
-  signIn: (email: string, password: string) => Promise<string | null>;
+  setUser: (id: string | null, email: string | null, name?: string | null) => void;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   init: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  session: null,
-  user: null,
+  userId: null,
+  userEmail: null,
+  userName: null,
   loading: true,
 
-  setSession: (session) => set({ session, user: session?.user ?? null }),
+  setUser: (id, email, name) => set({ userId: id, userEmail: email, userName: name }),
+
+  init: async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      set({
+        userId: session.user.id,
+        userEmail: session.user.email ?? null,
+        userName: session.user.user_metadata?.full_name ?? null,
+        loading: false,
+      });
+    } else {
+      set({ loading: false });
+    }
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        set({
+          userId: session.user.id,
+          userEmail: session.user.email ?? null,
+          userName: session.user.user_metadata?.full_name ?? null,
+        });
+      } else {
+        set({ userId: null, userEmail: null, userName: null });
+      }
+    });
+  },
 
   signIn: async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return error.message;
-    set({ session: data.session, user: data.user });
-    return null;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  },
+
+  signUp: async (email, password, name) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
+    if (error) throw error;
   },
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ session: null, user: null });
-  },
-
-  init: async () => {
-    const { data } = await supabase.auth.getSession();
-    set({ session: data.session, user: data.session?.user ?? null, loading: false });
-
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ session, user: session?.user ?? null });
-    });
+    set({ userId: null, userEmail: null, userName: null });
   },
 }));

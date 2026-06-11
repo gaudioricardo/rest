@@ -1,8 +1,13 @@
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import {
+  TouchableOpacity, Text, ActivityIndicator,
+  StyleSheet, ViewStyle, TextStyle,
+} from 'react-native';
+import { Colors, Radius, Spacing } from '../../shared/theme';
+import { useSettingsStore } from '../../stores/settingsStore';
 
-interface ButtonProps {
-  label: string;
+interface Props {
+  title: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
@@ -13,40 +18,66 @@ interface ButtonProps {
   icon?: React.ReactNode;
 }
 
-const variantStyles: Record<string, { container: string; text: string }> = {
-  primary: { container: 'bg-primary-950 active:bg-primary-900', text: 'text-white' },
-  secondary: { container: 'bg-secondary-950 active:bg-secondary-900', text: 'text-white' },
-  outline: { container: 'bg-transparent border border-primary-950 active:bg-primary-50', text: 'text-primary-950' },
-  ghost: { container: 'bg-transparent active:bg-gray-100', text: 'text-primary-950' },
-  danger: { container: 'bg-red-600 active:bg-red-700', text: 'text-white' },
-};
-
-const sizeStyles = {
-  sm: { container: 'px-3 py-2 rounded-lg', text: 'text-sm' },
-  md: { container: 'px-5 py-3 rounded-xl', text: 'text-base' },
-  lg: { container: 'px-6 py-4 rounded-2xl', text: 'text-lg' },
-};
-
-export function Button({
-  label, onPress, variant = 'primary', size = 'md',
+export const Button: React.FC<Props> = ({
+  title, onPress, variant = 'primary', size = 'md',
   loading, disabled, style, textStyle, icon,
-}: ButtonProps) {
-  const v = variantStyles[variant];
-  const s = sizeStyles[size];
-  const isDisabled = disabled || loading;
+}) => {
+  const dark = useSettingsStore((s) => s.darkMode);
+
+  const bg = variant === 'primary' ? Colors.primary
+    : variant === 'secondary' ? Colors.secondary
+    : variant === 'danger' ? Colors.error
+    : variant === 'outline' ? 'transparent'
+    : 'transparent';
+
+  const borderColor = variant === 'outline'
+    ? (dark ? Colors.dark.border : Colors.light.border)
+    : 'transparent';
+
+  const textColor = (variant === 'outline' || variant === 'ghost')
+    ? (dark ? Colors.dark.text : Colors.primary)
+    : '#ffffff';
+
+  const pad = size === 'sm' ? Spacing.sm : size === 'lg' ? Spacing.lg : Spacing.md;
+  const fontSize = size === 'sm' ? 13 : size === 'lg' ? 17 : 15;
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      disabled={isDisabled}
-      className={`${v.container} ${s.container} flex-row items-center justify-center gap-2 ${isDisabled ? 'opacity-50' : ''}`}
-      style={style}
+      disabled={disabled || loading}
       activeOpacity={0.8}
+      style={[
+        styles.btn,
+        { backgroundColor: bg, borderColor, paddingHorizontal: pad, paddingVertical: pad * 0.6 },
+        variant === 'outline' && { borderWidth: 1 },
+        (disabled || loading) && styles.disabled,
+        style,
+      ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={variant === 'outline' || variant === 'ghost' ? '#0c1c48' : '#fff'} />
-      ) : icon}
-      <Text className={`${v.text} ${s.text} font-inter-bold`} style={textStyle}>{label}</Text>
+        <ActivityIndicator size="small" color={textColor} />
+      ) : (
+        <>
+          {icon}
+          <Text style={[styles.text, { color: textColor, fontSize }, textStyle]}>{title}</Text>
+        </>
+      )}
     </TouchableOpacity>
   );
-}
+};
+
+const styles = StyleSheet.create({
+  btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.md,
+    gap: 6,
+  },
+  text: {
+    fontWeight: '600',
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+});

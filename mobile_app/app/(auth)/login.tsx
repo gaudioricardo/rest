@@ -1,156 +1,226 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform, Image, Alert, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useBiometrics } from '../../hooks/useBiometrics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Colors, Spacing, Radius, FontSize } from '../../shared/theme';
+import { tr } from '../../shared/i18n';
+import { Input } from '../../components/ui/Input';
+import { Button } from '../../components/ui/Button';
 
 export default function LoginScreen() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { signIn, session } = useAuthStore();
-  const biometricEnabled = useSettingsStore(s => s.biometricEnabled);
-  const { available, biometricType, authenticate } = useBiometrics();
+  const { signIn, signUp } = useAuthStore();
+  const { language, setLanguage, darkMode } = useSettingsStore();
+  const palette = darkMode ? Colors.dark : Colors.light;
 
-  useEffect(() => {
-    if (session) router.replace('/(app)/(tabs)');
-  }, [session]);
+  const lang = language;
 
-  useEffect(() => {
-    if (biometricEnabled && available) tryBiometric();
-  }, [biometricEnabled, available]);
+  const handleSubmit = async () => {
+    setError('');
+    setSuccess('');
+    if (!email || !password) { setError('Preencha todos os campos.'); return; }
+    if (!isLogin && !name) { setError('Insira o seu nome.'); return; }
+    if (password.length < 6) { setError('A senha deve ter pelo menos 6 caracteres.'); return; }
 
-  const tryBiometric = async () => {
-    const success = await authenticate();
-    if (success) {
-      const saved = await AsyncStorage.getItem('ugest_last_email');
-      if (saved) {
-        // trigger headless re-auth via stored session — session persists via SecureStore
-        router.replace('/(app)/(tabs)');
-      }
-    }
-  };
-
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Campos obrigatórios', 'Preencha o email e a password.');
-      return;
-    }
     setLoading(true);
-    const err = await signIn(email.trim(), password);
-    setLoading(false);
-    if (err) {
-      Alert.alert('Erro de autenticação', err);
-    } else {
-      await AsyncStorage.setItem('ugest_last_email', email.trim());
-      router.replace('/(app)/(tabs)');
+    try {
+      if (isLogin) {
+        await signIn(email, password);
+      } else {
+        await signUp(email, password, name);
+        setSuccess(lang === 'pt' ? 'Conta criada! Verifique o seu email.' : 'Account created! Check your email.');
+        setIsLogin(true);
+      }
+    } catch (e: any) {
+      setError(lang === 'pt' ? 'Credenciais inválidas' : 'Invalid credentials');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-ugest-background dark:bg-ugest-dark-background">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-      >
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View className="flex-1 px-6 pt-16 pb-10">
-            {/* Logo */}
-            <View className="items-center mb-12">
-              <View className="w-20 h-20 bg-primary-950 rounded-3xl items-center justify-center mb-4 shadow-lg">
-                <Text className="text-white font-montserrat text-2xl">U</Text>
-              </View>
-              <Text className="text-3xl font-montserrat text-primary-950 dark:text-white">Ugest ERP</Text>
-              <Text className="text-gray-500 dark:text-gray-400 font-inter mt-1">Sistema de Gestão Empresarial</Text>
-            </View>
-
-            {/* Form */}
-            <View className="gap-4 mb-6">
-              <View>
-                <Text className="font-inter-medium text-gray-700 dark:text-gray-300 mb-1.5 text-sm">Email</Text>
-                <View className="flex-row items-center bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 px-4">
-                  <Feather name="mail" size={18} color="#9ca3af" />
-                  <TextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="email@empresa.co.mz"
-                    placeholderTextColor="#9ca3af"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    className="flex-1 py-4 px-3 font-inter text-gray-900 dark:text-white text-base"
-                  />
-                </View>
-              </View>
-
-              <View>
-                <Text className="font-inter-medium text-gray-700 dark:text-gray-300 mb-1.5 text-sm">Password</Text>
-                <View className="flex-row items-center bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 px-4">
-                  <Feather name="lock" size={18} color="#9ca3af" />
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="••••••••"
-                    placeholderTextColor="#9ca3af"
-                    secureTextEntry={!showPass}
-                    autoComplete="password"
-                    className="flex-1 py-4 px-3 font-inter text-gray-900 dark:text-white text-base"
-                  />
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                    <Feather name={showPass ? 'eye-off' : 'eye'} size={18} color="#9ca3af" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            {/* Login Button */}
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {/* Header */}
+          <View style={styles.header}>
             <TouchableOpacity
-              onPress={handleLogin}
-              disabled={loading}
-              className="bg-primary-950 rounded-xl py-4 items-center justify-center mb-4 flex-row gap-2 active:opacity-80"
-              activeOpacity={0.85}
+              onPress={() => setLanguage(lang === 'pt' ? 'en' : 'pt')}
+              style={[styles.langBtn, { borderColor: palette.border }]}
             >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Feather name="log-in" size={18} color="#fff" />
-              }
-              <Text className="text-white font-inter-bold text-base">
-                {loading ? 'A entrar...' : 'Entrar'}
+              <Text style={{ color: palette.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                {lang === 'pt' ? 'EN' : 'PT'}
               </Text>
             </TouchableOpacity>
+          </View>
 
-            {/* Biometric */}
-            {available && biometricEnabled && (
+          {/* Logo */}
+          <View style={styles.logoBlock}>
+            <Text style={[styles.logoText, { color: Colors.primary }]}>Rest</Text>
+            <Text style={[styles.tagline, { color: Colors.secondary }]}>
+              {lang === 'pt' ? 'Onde o crescimento encontra espaço' : 'Where growth finds space'}
+            </Text>
+          </View>
+
+          {/* Card */}
+          <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            {/* Tabs */}
+            <View style={[styles.tabs, { backgroundColor: palette.surface }]}>
+              {[
+                { key: true, label: tr(lang, 'login') },
+                { key: false, label: tr(lang, 'signup') },
+              ].map(({ key, label }) => (
+                <TouchableOpacity
+                  key={String(key)}
+                  onPress={() => { setIsLogin(key); setError(''); setSuccess(''); }}
+                  style={[
+                    styles.tab,
+                    isLogin === key && { backgroundColor: palette.card, ...shadowSm },
+                  ]}
+                >
+                  <Text style={[styles.tabText, { color: isLogin === key ? Colors.primary : palette.textMuted }]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={{ marginTop: Spacing.lg }}>
+              {!isLogin && (
+                <Input
+                  label={tr(lang, 'fullName')}
+                  placeholder={lang === 'pt' ? 'João Silva' : 'John Smith'}
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                />
+              )}
+              <Input
+                label={tr(lang, 'email')}
+                placeholder="email@empresa.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <Input
+                label={tr(lang, 'password')}
+                placeholder="••••••••"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+
+              {error ? (
+                <View style={[styles.alert, { backgroundColor: '#fee2e2', borderColor: Colors.error }]}>
+                  <Text style={{ color: Colors.error, fontSize: 13 }}>{error}</Text>
+                </View>
+              ) : null}
+
+              {success ? (
+                <View style={[styles.alert, { backgroundColor: '#dcfce7', borderColor: Colors.success }]}>
+                  <Text style={{ color: Colors.success, fontSize: 13 }}>{success}</Text>
+                </View>
+              ) : null}
+
+              <Button
+                title={isLogin ? tr(lang, 'login') : tr(lang, 'signup')}
+                onPress={handleSubmit}
+                loading={loading}
+                style={{ marginTop: 4 }}
+              />
+
               <TouchableOpacity
-                onPress={tryBiometric}
-                className="flex-row items-center justify-center gap-2 py-3"
+                onPress={() => { setIsLogin(!isLogin); setError(''); setSuccess(''); }}
+                style={styles.switchLink}
               >
-                <Feather name="shield" size={18} color="#0c1c48" />
-                <Text className="font-inter-medium text-primary-950 dark:text-primary-200">
-                  Entrar com {biometricType}
+                <Text style={{ color: palette.textMuted, fontSize: 13 }}>
+                  {isLogin ? tr(lang, 'noAccount') : tr(lang, 'hasAccount')}
+                  <Text style={{ color: Colors.primary, fontWeight: '600' }}>
+                    {' '}{isLogin ? tr(lang, 'signup') : tr(lang, 'login')}
+                  </Text>
                 </Text>
               </TouchableOpacity>
-            )}
-
-            <View className="flex-1" />
-            <Text className="text-center text-xs text-gray-400 font-inter">
-              Ugest ERP · Moçambique · v1.0
-            </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+const shadowSm = { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 };
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  header: {
+    alignItems: 'flex-end',
+    marginBottom: Spacing.md,
+  },
+  langBtn: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  logoBlock: {
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  logoText: {
+    fontFamily: 'PlayfairDisplay_700Bold',
+    fontSize: 42,
+    letterSpacing: 2,
+  },
+  tagline: {
+    fontFamily: 'PlayfairDisplay_400Regular_Italic',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  card: {
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    padding: Spacing.lg,
+  },
+  tabs: {
+    flexDirection: 'row',
+    borderRadius: Radius.md,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: Radius.sm,
+  },
+  tabText: {
+    fontWeight: '600',
+    fontSize: FontSize.sm,
+  },
+  alert: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  switchLink: {
+    alignItems: 'center',
+    marginTop: Spacing.md,
+  },
+});

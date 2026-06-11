@@ -1,62 +1,112 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { DocumentItem } from '../../shared/types';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import type { DocumentItem } from '../../shared/types';
+import { Colors, Radius, Spacing, FontSize } from '../../shared/theme';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { formatCurrency } from '../../shared/i18n';
 
-interface DocumentItemRowProps {
+interface Props {
   item: DocumentItem;
   index: number;
   onChange: (index: number, field: keyof DocumentItem, value: string) => void;
   onRemove: (index: number) => void;
 }
 
-export function DocumentItemRow({ item, index, onChange, onRemove }: DocumentItemRowProps) {
+export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemove }) => {
+  const dark = useSettingsStore((s) => s.darkMode);
+  const palette = dark ? Colors.dark : Colors.light;
   const total = item.quantity * item.unitPrice;
 
   return (
-    <View className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3 mb-2">
-      <View className="flex-row items-center justify-between mb-2">
-        <Text className="text-xs font-inter-bold text-gray-500 dark:text-gray-400 uppercase">Item {index + 1}</Text>
-        <TouchableOpacity onPress={() => onRemove(index)} className="p-1">
-          <Feather name="trash-2" size={16} color="#ef4444" />
+    <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <View style={styles.top}>
+        <TextInput
+          style={[styles.descInput, { color: palette.text, borderColor: palette.border }]}
+          placeholder="Descrição do item"
+          placeholderTextColor={palette.textMuted}
+          value={item.description}
+          onChangeText={(v) => onChange(index, 'description', v)}
+        />
+        <TouchableOpacity onPress={() => onRemove(index)} style={styles.remove}>
+          <Ionicons name="close-circle" size={20} color={Colors.error} />
         </TouchableOpacity>
       </View>
-
-      <TextInput
-        value={item.description}
-        onChangeText={v => onChange(index, 'description', v)}
-        placeholder="Descrição do produto/serviço"
-        placeholderTextColor="#9ca3af"
-        className="bg-white dark:bg-gray-600 rounded-lg px-3 py-2.5 text-sm font-inter text-gray-900 dark:text-white mb-2 border border-gray-200 dark:border-gray-500"
-      />
-
-      <View className="flex-row gap-2">
-        <View className="flex-1">
-          <Text className="text-xs font-inter-medium text-gray-500 dark:text-gray-400 mb-1">Quantidade</Text>
+      <View style={styles.bottom}>
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: palette.textMuted }]}>Qtd</Text>
           <TextInput
-            value={String(item.quantity)}
-            onChangeText={v => onChange(index, 'quantity', v)}
+            style={[styles.numInput, { color: palette.text, borderColor: palette.border }]}
             keyboardType="numeric"
-            className="bg-white dark:bg-gray-600 rounded-lg px-3 py-2.5 text-sm font-inter text-gray-900 dark:text-white border border-gray-200 dark:border-gray-500"
+            value={String(item.quantity)}
+            onChangeText={(v) => onChange(index, 'quantity', v)}
           />
         </View>
-        <View className="flex-1">
-          <Text className="text-xs font-inter-medium text-gray-500 dark:text-gray-400 mb-1">Preço Unit. (MZN)</Text>
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: palette.textMuted }]}>P. Unit. (MT)</Text>
           <TextInput
+            style={[styles.numInput, { color: palette.text, borderColor: palette.border }]}
+            keyboardType="numeric"
             value={String(item.unitPrice)}
-            onChangeText={v => onChange(index, 'unitPrice', v)}
-            keyboardType="decimal-pad"
-            className="bg-white dark:bg-gray-600 rounded-lg px-3 py-2.5 text-sm font-inter text-gray-900 dark:text-white border border-gray-200 dark:border-gray-500"
+            onChangeText={(v) => onChange(index, 'unitPrice', v)}
           />
         </View>
-      </View>
-
-      <View className="flex-row justify-end mt-2">
-        <Text className="text-xs font-inter-medium text-gray-500 dark:text-gray-400">Total: </Text>
-        <Text className="text-xs font-inter-bold text-primary-950 dark:text-blue-400">
-          {total.toLocaleString('pt-MZ', { minimumFractionDigits: 2 })} MZN
-        </Text>
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: palette.textMuted }]}>Total</Text>
+          <Text style={[styles.total, { color: Colors.primary }]}>{formatCurrency(total)}</Text>
+        </View>
       </View>
     </View>
   );
-}
+};
+
+const styles = StyleSheet.create({
+  row: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.sm,
+    marginBottom: Spacing.sm,
+    gap: 8,
+  },
+  top: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  descInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: FontSize.sm,
+  },
+  remove: {
+    padding: 2,
+  },
+  bottom: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  field: {
+    flex: 1,
+    gap: 4,
+  },
+  label: {
+    fontSize: FontSize.xs,
+  },
+  numInput: {
+    borderWidth: 1,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+  },
+  total: {
+    fontWeight: '700',
+    fontSize: FontSize.sm,
+    paddingVertical: 6,
+    textAlign: 'center',
+  },
+});

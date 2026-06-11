@@ -1,252 +1,243 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../../stores/authStore';
-import { useInvoiceStore } from '../../../stores/invoiceStore';
+import { useDataStore } from '../../../stores/dataStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { DocumentItem } from '../../../shared/types';
+import { Colors, Spacing, Radius, FontSize } from '../../../shared/theme';
+import { tr, formatCurrency } from '../../../shared/i18n';
+import { Input } from '../../../components/ui/Input';
+import { Button } from '../../../components/ui/Button';
 import { DocumentItemRow } from '../../../components/forms/DocumentItemRow';
-import { ClientAutocomplete } from '../../../components/forms/ClientAutocomplete';
-import { supabase } from '../../../lib/supabase';
-import { getNextSeqNumber, mapInvoice } from '../../../shared/db';
-import { hapticSuccess, hapticError } from '../../../lib/haptics';
+import { useToast } from '../../../components/ui/ToastContainer';
+import { createInvoice } from '../../../lib/db';
+import type { DocumentItem } from '../../../shared/types';
 
-function formatMZN(v: number) {
-  return v.toLocaleString('pt-MZ', { minimumFractionDigits: 2 }) + ' MZN';
-}
+const TAX_RATE = 0.03;
 
 export default function NewInvoiceScreen() {
-  const user = useAuthStore(s => s.user);
-  const { invoices, loadAll } = useInvoiceStore();
-  const company = useSettingsStore(s => s.company);
+  const router = useRouter();
+  const { showToast } = useToast();
+  const { userId } = useAuthStore();
+  const { loadInvoices, loadClients } = useDataStore();
+  const { language, darkMode, company } = useSettingsStore();
+
+  const palette = darkMode ? Colors.dark : Colors.light;
+  const lang = language;
 
   const [client, setClient] = useState('');
   const [clientNuit, setClientNuit] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientEmail, setClientEmail] = useState('');
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<DocumentItem[]>([{ description: '', quantity: 1, unitPrice: 0 }]);
+  const [useSecondary, setUseSecondary] = useState(false);
+  const [items, setItems] = useState<DocumentItem[]>([
+    { description: '', quantity: 1, unitPrice: 0 },
+  ]);
   const [loading, setLoading] = useState(false);
 
   const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const ispc = subtotal * 0.03;
-  const total = subtotal + ispc;
+  const tax = subtotal * TAX_RATE;
+  const total = subtotal + tax;
 
-  const updateItem = (index: number, field: keyof DocumentItem, value: string) => {
-    setItems(prev => prev.map((item, i) => {
-      if (i !== index) return item;
-      if (field === 'quantity') return { ...item, quantity: parseInt(value) || 0 };
-      if (field === 'unitPrice') return { ...item, unitPrice: parseFloat(value) || 0 };
-      return { ...item, [field]: value };
-    }));
+  const handleItemChange = (index: number, field: keyof DocumentItem, value: string) => {
+    setItems((prev) => {
+      const updated = [...prev];
+      if (field === 'quantity' || field === 'unitPrice') {
+        (updated[index] as any)[field] = parseFloat(value) || 0;
+      } else {
+        (updated[index] as any)[field] = value;
+      }
+      return updated;
+    });
   };
 
-  const addItem = () => setItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
-  const removeItem = (index: number) => setItems(prev => prev.filter((_, i) => i !== index));
+  const addItem = () => {
+    setItems((prev) => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
+  };
+
+  const removeItem = (index: number) => {
+    if (items.length === 1) return;
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async () => {
-    if (!client.trim()) { Alert.alert('Erro', 'Nome do cliente obrigatório.'); return; }
-    if (items.some(i => !i.description.trim())) { Alert.alert('Erro', 'Todos os itens precisam de descrição.'); return; }
-    if (!user) return;
+    if (!client.trim()) { showToast(lang === 'pt' ? 'Erro' : 'Error', lang === 'pt' ? 'Insira o nome do cliente' : 'Enter client name', 'error'); return; }
+    if (!userId) return;
 
     setLoading(true);
     try {
-      const seq = await getNextSeqNumber('invoices', user.id);
-      const today = new Date().toISOString().slice(0, 10);
-
-      const { data: invData, error: invErr } = await supabase
-        .from('invoices')
-        .insert({
-          user_id: user.id,
-          seq_number: seq,
+      await createInvoice(
+        userId,
+        {
           client: client.trim(),
-          client_nuit: clientNuit.trim() || null,
-          client_phone: clientPhone.trim() || null,
-          client_email: clientEmail.trim() || null,
-          issue_date: today,
-          due_date: dueDate || null,
+          clientNuit: clientNuit || undefined,
+          clientPhone: clientPhone || undefined,
+          clientEmail: clientEmail || undefined,
+          issueDate,
+          dueDate: dueDate || undefined,
           amount: total,
           status: 'Pending',
-          notes: notes.trim() || null,
-          company_profile_id: 'primary',
-        })
-        .select()
-        .single();
-
-      if (invErr || !invData) throw new Error(invErr?.message ?? 'Erro ao criar factura');
-
-      const invId = (invData as Record<string, unknown>).id as string;
-
-      if (items.length > 0) {
-        await supabase.from('invoice_items').insert(
-          items.map(item => ({
-            invoice_id: invId,
-            user_id: user.id,
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-          }))
-        );
-      }
-
-      // Auto-register client
-      const existingClient = await supabase
-        .from('debt_clients')
-        .select('id')
-        .eq('user_id', user.id)
-        .ilike('full_name', client.trim())
-        .maybeSingle();
-
-      if (!existingClient.data) {
-        await supabase.from('debt_clients').insert({
-          user_id: user.id,
-          full_name: client.trim(),
-          email: clientEmail.trim() || null,
-          movitel_number: '',
-          vodacom_number: clientPhone.trim() || '',
-          address: '',
-          status: 'Pendente',
-        });
-      }
-
-      await loadAll(user.id);
-      hapticSuccess();
-      router.replace(`/(app)/invoice/${invId}`);
+          companyProfileId: useSecondary ? 'secondary' : 'primary',
+          notes: notes || undefined,
+        },
+        items.filter((i) => i.description.trim())
+      );
+      await loadInvoices(userId);
+      await loadClients(userId);
+      showToast(
+        lang === 'pt' ? 'Factura criada' : 'Invoice created',
+        undefined,
+        'success'
+      );
+      router.back();
     } catch (e) {
-      hapticError();
-      Alert.alert('Erro', e instanceof Error ? e.message : 'Erro desconhecido');
+      showToast(lang === 'pt' ? 'Erro' : 'Error', String(e), 'error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-ugest-background dark:bg-ugest-dark-background" edges={['top']}>
-      <View className="flex-row items-center px-4 pt-2 pb-4 gap-3">
-        <TouchableOpacity onPress={() => router.back()} className="p-1">
-          <Feather name="x" size={22} color="#0c1c48" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <View style={[styles.header, { backgroundColor: palette.card, borderBottomColor: palette.border }]}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="close" size={24} color={palette.text} />
         </TouchableOpacity>
-        <Text className="flex-1 font-montserrat text-xl text-primary-950 dark:text-white">Nova Factura</Text>
+        <Text style={[styles.title, { color: palette.text }]}>{tr(lang, 'newInvoice')}</Text>
+        <Button title={tr(lang, 'save')} onPress={handleSubmit} loading={loading} size="sm" />
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
-        <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {/* Company Profile */}
+          {company?.secondaryCompany && (
+            <View style={[styles.section, { borderColor: palette.border }]}>
+              <Text style={[styles.sectionTitle, { color: palette.text }]}>
+                {lang === 'pt' ? 'Empresa' : 'Company'}
+              </Text>
+              <View style={styles.switchRow}>
+                <Text style={[styles.switchLabel, { color: palette.textSecondary }]}>
+                  {useSecondary ? company.secondaryCompany.companyName : company.companyName}
+                </Text>
+                <Switch
+                  value={useSecondary}
+                  onValueChange={setUseSecondary}
+                  trackColor={{ true: Colors.secondary, false: palette.border }}
+                />
+              </View>
+            </View>
+          )}
+
           {/* Client */}
-          <Text className="font-inter-bold text-gray-700 dark:text-gray-300 mb-2 text-sm uppercase tracking-wide">Cliente</Text>
-          <View className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-4 border border-gray-100 dark:border-gray-700 gap-3">
-            <ClientAutocomplete
-              value={client}
-              onChange={(name, opt) => {
-                setClient(name);
-                if (opt?.email) setClientEmail(opt.email);
-                if (opt?.phone) setClientPhone(opt.phone ?? '');
-                if (opt?.nuit) setClientNuit(opt.nuit ?? '');
-              }}
-            />
-            <TextInput
-              value={clientNuit}
-              onChangeText={setClientNuit}
-              placeholder="NUIT (opcional)"
-              placeholderTextColor="#9ca3af"
-              className="bg-gray-50 dark:bg-gray-700 rounded-xl px-4 py-3 font-inter text-gray-800 dark:text-gray-100 text-sm border border-gray-200 dark:border-gray-600"
-            />
-            <TextInput
-              value={clientPhone}
-              onChangeText={setClientPhone}
-              placeholder="Telefone (opcional)"
-              placeholderTextColor="#9ca3af"
-              keyboardType="phone-pad"
-              className="bg-gray-50 dark:bg-gray-700 rounded-xl px-4 py-3 font-inter text-gray-800 dark:text-gray-100 text-sm border border-gray-200 dark:border-gray-600"
-            />
-            <TextInput
-              value={clientEmail}
-              onChangeText={setClientEmail}
-              placeholder="Email (opcional)"
-              placeholderTextColor="#9ca3af"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              className="bg-gray-50 dark:bg-gray-700 rounded-xl px-4 py-3 font-inter text-gray-800 dark:text-gray-100 text-sm border border-gray-200 dark:border-gray-600"
-            />
-            <TextInput
-              value={dueDate}
-              onChangeText={setDueDate}
-              placeholder="Data de vencimento (AAAA-MM-DD)"
-              placeholderTextColor="#9ca3af"
-              className="bg-gray-50 dark:bg-gray-700 rounded-xl px-4 py-3 font-inter text-gray-800 dark:text-gray-100 text-sm border border-gray-200 dark:border-gray-600"
-            />
+          <View style={[styles.section, { borderColor: palette.border }]}>
+            <Text style={[styles.sectionTitle, { color: palette.text }]}>
+              {lang === 'pt' ? 'Dados do Cliente' : 'Client Info'}
+            </Text>
+            <Input label={tr(lang, 'clientName')} value={client} onChangeText={setClient} placeholder="Nome completo" />
+            <Input label={tr(lang, 'nuit')} value={clientNuit} onChangeText={setClientNuit} placeholder="000000000" keyboardType="numeric" />
+            <Input label={tr(lang, 'phone')} value={clientPhone} onChangeText={setClientPhone} placeholder="+258 8X XXX XXXX" keyboardType="phone-pad" />
+            <Input label={tr(lang, 'email')} value={clientEmail} onChangeText={setClientEmail} placeholder="email@cliente.com" keyboardType="email-address" autoCapitalize="none" />
+          </View>
+
+          {/* Dates */}
+          <View style={[styles.section, { borderColor: palette.border }]}>
+            <Text style={[styles.sectionTitle, { color: palette.text }]}>
+              {lang === 'pt' ? 'Datas' : 'Dates'}
+            </Text>
+            <Input label={tr(lang, 'issueDate')} value={issueDate} onChangeText={setIssueDate} placeholder="YYYY-MM-DD" />
+            <Input label={tr(lang, 'dueDate')} value={dueDate} onChangeText={setDueDate} placeholder="YYYY-MM-DD (opcional)" />
           </View>
 
           {/* Items */}
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="font-inter-bold text-gray-700 dark:text-gray-300 text-sm uppercase tracking-wide">Itens</Text>
-            <TouchableOpacity onPress={addItem} className="flex-row items-center gap-1 py-1 px-3 bg-primary-950 rounded-full">
-              <Feather name="plus" size={14} color="#fff" />
-              <Text className="text-xs font-inter-bold text-white">Adicionar</Text>
-            </TouchableOpacity>
-          </View>
-          <View className="mb-4">
+          <View style={[styles.section, { borderColor: palette.border }]}>
+            <Text style={[styles.sectionTitle, { color: palette.text }]}>
+              {lang === 'pt' ? 'Itens / Serviços' : 'Items / Services'}
+            </Text>
             {items.map((item, i) => (
               <DocumentItemRow
-                key={i} item={item} index={i}
-                onChange={updateItem}
+                key={i}
+                item={item}
+                index={i}
+                onChange={handleItemChange}
                 onRemove={removeItem}
               />
             ))}
+            <TouchableOpacity
+              onPress={addItem}
+              style={[styles.addItemBtn, { borderColor: Colors.primary }]}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
+              <Text style={{ color: Colors.primary, fontWeight: '600', fontSize: 13 }}>
+                {tr(lang, 'addItem')}
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Totals preview */}
-          <View className="bg-primary-950 rounded-2xl p-4 mb-4">
-            <View className="flex-row justify-between mb-1">
-              <Text className="font-inter text-primary-200 text-sm">Subtotal</Text>
-              <Text className="font-inter-medium text-white text-sm">{formatMZN(subtotal)}</Text>
+          {/* Totals */}
+          <View style={[styles.totalsBox, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <View style={styles.totalRow}>
+              <Text style={{ color: palette.textSecondary }}>{tr(lang, 'subtotal')}</Text>
+              <Text style={{ color: palette.text, fontWeight: '600' }}>{formatCurrency(subtotal)}</Text>
             </View>
-            <View className="flex-row justify-between mb-2">
-              <Text className="font-inter text-primary-200 text-sm">ISPC (3%)</Text>
-              <Text className="font-inter-medium text-white text-sm">{formatMZN(ispc)}</Text>
+            <View style={styles.totalRow}>
+              <Text style={{ color: palette.textSecondary }}>{tr(lang, 'tax')}</Text>
+              <Text style={{ color: palette.text, fontWeight: '600' }}>{formatCurrency(tax)}</Text>
             </View>
-            <View className="flex-row justify-between pt-2 border-t border-primary-800">
-              <Text className="font-inter-bold text-white text-base">TOTAL</Text>
-              <Text className="font-inter-bold text-white text-xl">{formatMZN(total)}</Text>
+            <View style={[styles.totalRow, styles.totalFinal]}>
+              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
+              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
             </View>
           </View>
 
           {/* Notes */}
-          <Text className="font-inter-bold text-gray-700 dark:text-gray-300 mb-2 text-sm uppercase tracking-wide">Notas</Text>
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Notas adicionais (opcional)"
-            placeholderTextColor="#9ca3af"
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 font-inter text-gray-800 dark:text-gray-100 text-sm border border-gray-100 dark:border-gray-700 mb-6"
-          />
+          <View style={[styles.section, { borderColor: palette.border }]}>
+            <Input
+              label={tr(lang, 'notes')}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder={lang === 'pt' ? 'Observações (opcional)' : 'Notes (optional)'}
+              multiline
+              numberOfLines={3}
+              style={{ height: 80, textAlignVertical: 'top' }}
+            />
+          </View>
         </ScrollView>
-
-        <View className="px-4 pb-6">
-          <TouchableOpacity
-            onPress={handleSubmit}
-            disabled={loading}
-            className="flex-row items-center justify-center gap-2 py-4 rounded-2xl bg-primary-950 active:opacity-80"
-            activeOpacity={0.85}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Feather name="check" size={20} color="#fff" />
-            }
-            <Text className="font-inter-bold text-white text-base">
-              {loading ? 'A criar...' : 'Criar Factura'}
-            </Text>
-          </TouchableOpacity>
-        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, borderBottomWidth: 1,
+  },
+  title: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: FontSize.lg, fontWeight: '700' },
+  scroll: { padding: Spacing.md, gap: Spacing.md, paddingBottom: 48 },
+  section: {
+    borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md, gap: 4,
+  },
+  sectionTitle: { fontWeight: '700', fontSize: FontSize.sm, marginBottom: 8 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  switchLabel: { fontSize: FontSize.sm, flex: 1 },
+  addItemBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: Radius.md,
+  },
+  totalsBox: {
+    borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md, gap: 8,
+  },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalFinal: {
+    borderTopWidth: 2, borderTopColor: Colors.primary, paddingTop: 10, marginTop: 4,
+  },
+});

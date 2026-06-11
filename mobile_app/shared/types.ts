@@ -13,18 +13,11 @@ export interface StockItem {
   warehousePt: string;
 }
 
-export interface Transaction {
-  id: string;
-  transactionId: string;
-  client: string;
-  initials: string;
-  amount: number;
-  status: 'Paid' | 'Pending' | 'Overdue';
-  statusPt: 'Pago' | 'Pendente' | 'Vencido';
-  date: string;
-  datePt: string;
-  avatarBg: string;
-  avatarText: string;
+export interface DocumentItem {
+  id?: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
 }
 
 export interface Invoice {
@@ -105,7 +98,6 @@ export interface Expense {
   status: 'Approved' | 'Pending' | 'Rejected';
   statusPt: 'Aprovado' | 'Pendente' | 'Rejeitado';
   notes?: string;
-  photoBase64?: string;
 }
 
 export interface Contact {
@@ -119,14 +111,15 @@ export interface Contact {
   avatarColor: string;
 }
 
-export type Language = 'en' | 'pt';
-export type Currency = 'MZN';
-
-export interface DocumentItem {
-  id?: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
+export interface DebtClient {
+  id: string;
+  fullName: string;
+  movitelNumber: string;
+  vodacomNumber: string;
+  email?: string;
+  address: string;
+  status: 'Pendente' | 'Liquidado';
+  createdAt?: string;
 }
 
 export interface BankAccount {
@@ -169,13 +162,4 @@ export interface CompanySettings {
   secondaryCompany?: SecondaryCompany | null;
 }
 
-export interface DebtClient {
-  id: string;
-  fullName: string;
-  movitelNumber: string;
-  vodacomNumber: string;
-  email?: string;
-  address: string;
-  status: 'Pendente' | 'Liquidado';
-  createdAt?: string;
-}
+export type Language = 'en' | 'pt';
