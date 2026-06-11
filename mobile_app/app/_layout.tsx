@@ -77,7 +77,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  const [showPreloader, setShowPreloader] = useState(true);
+  const [preloaderDone, setPreloaderDone] = useState(false);
   const { init: initAuth } = useAuthStore();
   const { initPrefs } = useSettingsStore();
 
@@ -89,24 +89,16 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    const setup = async () => {
-      await initPrefs();
-      await initAuth();
-      if (fontsLoaded) {
-        await SplashScreen.hideAsync();
-      }
-    };
-    setup();
+    initPrefs();
+    initAuth();
+  }, []);
+
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded]);
 
-  if (!fontsLoaded || showPreloader) {
-    return (
-      <Preloader
-        onDone={() => {
-          if (fontsLoaded) setShowPreloader(false);
-        }}
-      />
-    );
+  if (!fontsLoaded || !preloaderDone) {
+    return <Preloader onDone={() => setPreloaderDone(true)} />;
   }
 
   return (

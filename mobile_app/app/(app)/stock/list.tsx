@@ -82,7 +82,7 @@ export default function StockListScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View style={[styles.progressBg, { backgroundColor: palette.surface }]}>
                   <View style={[styles.progressFill, {
-                    width: `${Math.min(100, (item.stockLevel / item.maxStock) * 100)}%` as any,
+                    width: `${item.maxStock > 0 ? Math.min(100, (item.stockLevel / item.maxStock) * 100) : 0}%` as any,
                     backgroundColor: item.status === 'Out of Stock' ? Colors.error : item.status === 'Low Stock' ? Colors.warning : Colors.success,
                   }]} />
                 </View>

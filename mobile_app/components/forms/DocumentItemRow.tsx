@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { DocumentItem } from '../../shared/types';
@@ -16,7 +16,21 @@ interface Props {
 export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemove }) => {
   const dark = useSettingsStore((s) => s.darkMode);
   const palette = dark ? Colors.dark : Colors.light;
-  const total = item.quantity * item.unitPrice;
+
+  const [qtyText, setQtyText] = useState(item.quantity > 0 ? String(item.quantity) : '');
+  const [priceText, setPriceText] = useState(item.unitPrice > 0 ? String(item.unitPrice) : '');
+
+  const total = isFinite(item.quantity * item.unitPrice) ? item.quantity * item.unitPrice : 0;
+
+  const handleQtyChange = (v: string) => {
+    setQtyText(v);
+    onChange(index, 'quantity', v.replace(',', '.'));
+  };
+
+  const handlePriceChange = (v: string) => {
+    setPriceText(v);
+    onChange(index, 'unitPrice', v.replace(',', '.'));
+  };
 
   return (
     <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -37,18 +51,22 @@ export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemo
           <Text style={[styles.label, { color: palette.textMuted }]}>Qtd</Text>
           <TextInput
             style={[styles.numInput, { color: palette.text, borderColor: palette.border }]}
-            keyboardType="numeric"
-            value={String(item.quantity)}
-            onChangeText={(v) => onChange(index, 'quantity', v)}
+            keyboardType="decimal-pad"
+            value={qtyText}
+            onChangeText={handleQtyChange}
+            placeholder="1"
+            placeholderTextColor={palette.textMuted}
           />
         </View>
         <View style={styles.field}>
           <Text style={[styles.label, { color: palette.textMuted }]}>P. Unit. (MT)</Text>
           <TextInput
             style={[styles.numInput, { color: palette.text, borderColor: palette.border }]}
-            keyboardType="numeric"
-            value={String(item.unitPrice)}
-            onChangeText={(v) => onChange(index, 'unitPrice', v)}
+            keyboardType="decimal-pad"
+            value={priceText}
+            onChangeText={handlePriceChange}
+            placeholder="0"
+            placeholderTextColor={palette.textMuted}
           />
         </View>
         <View style={styles.field}>

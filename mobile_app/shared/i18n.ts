@@ -167,10 +167,11 @@ export const tr = (
 };
 
 export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('pt-MZ', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount) + ' MT';
+  if (!isFinite(amount) || isNaN(amount)) return '0,00 MT';
+  const fixed = Math.abs(amount).toFixed(2);
+  const [integer, decimal] = fixed.split('.');
+  const thousands = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (amount < 0 ? '-' : '') + thousands + ',' + decimal + ' MT';
 };
 
 export const formatDate = (iso: string, lang: Language): string => {

@@ -43,7 +43,10 @@ export default function NewInvoiceScreen() {
   ]);
   const [loading, setLoading] = useState(false);
 
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const subtotal = items.reduce((s, i) => {
+    const v = i.quantity * i.unitPrice;
+    return s + (isFinite(v) ? v : 0);
+  }, 0);
   const tax = subtotal * TAX_RATE;
   const total = subtotal + tax;
 
@@ -51,7 +54,7 @@ export default function NewInvoiceScreen() {
     setItems((prev) => {
       const updated = [...prev];
       if (field === 'quantity' || field === 'unitPrice') {
-        (updated[index] as any)[field] = parseFloat(value) || 0;
+        (updated[index] as any)[field] = parseFloat(value.replace(',', '.')) || 0;
       } else {
         (updated[index] as any)[field] = value;
       }

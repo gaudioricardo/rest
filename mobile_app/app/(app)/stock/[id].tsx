@@ -36,7 +36,7 @@ export default function StockDetailScreen() {
 
   if (!item) return null;
 
-  const pct = Math.min(100, (item.stockLevel / item.maxStock) * 100);
+  const pct = item.maxStock > 0 ? Math.min(100, (item.stockLevel / item.maxStock) * 100) : 0;
 
   const handleUpdate = async () => {
     if (!userId) return;

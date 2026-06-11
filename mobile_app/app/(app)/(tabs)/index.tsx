@@ -201,7 +201,7 @@ export default function DashboardScreen() {
                         style={[
                           styles.progressFill,
                           {
-                            width: `${Math.min(100, (item.stockLevel / item.maxStock) * 100)}%`,
+                            width: `${item.maxStock > 0 ? Math.min(100, (item.stockLevel / item.maxStock) * 100) : 0}%`,
                             backgroundColor: item.status === 'Out of Stock' ? Colors.error : Colors.warning,
                           } as any,
                         ]}

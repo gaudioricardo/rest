@@ -48,7 +48,7 @@ export default function NewExpenseScreen() {
         merchant: merchant.trim(),
         category: category.en,
         categoryPt: category.pt,
-        amount: parseFloat(amount),
+        amount: parseFloat(amount.replace(',', '.')) || 0,
         expenseDate,
         notes: notes || undefined,
       });

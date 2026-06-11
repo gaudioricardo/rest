@@ -86,7 +86,11 @@ const mapInvoice = (row: any): Invoice => ({
   status: row.status,
   statusPt: row.status === 'Paid' ? 'Pago' : row.status === 'Overdue' ? 'Vencido' : 'Pendente',
   logoBg: row.logo_bg ?? getAvatarColor(row.client ?? ''),
-  items: row.invoice_items ?? undefined,
+  items: (row.invoice_items ?? []).map((it: any) => ({
+    description: it.description ?? '',
+    quantity: Number(it.quantity) || 0,
+    unitPrice: parseFloat(it.unit_price) || 0,
+  })),
   companyProfileId: row.company_profile_id ?? 'primary',
   notes: row.notes,
 });
@@ -173,7 +177,11 @@ const mapQuote = (row: any): Quote => ({
     row.status === 'Rejected' ? 'Rejeitado' :
     row.status === 'Liquidado' ? 'Liquidado' : 'Pendente',
   logoBg: row.logo_bg ?? getAvatarColor(row.client ?? ''),
-  items: row.quote_items ?? undefined,
+  items: (row.quote_items ?? []).map((it: any) => ({
+    description: it.description ?? '',
+    quantity: Number(it.quantity) || 0,
+    unitPrice: parseFloat(it.unit_price) || 0,
+  })),
   companyProfileId: row.company_profile_id ?? 'primary',
   notes: row.notes,
 });

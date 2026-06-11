@@ -60,7 +60,7 @@ export default function SettingsScreen() {
   const pickImage = async (setter: (b64: string) => void) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       base64: true, quality: 0.7,
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
     });
     if (!result.canceled && result.assets[0].base64) {
       setter(`data:image/jpeg;base64,${result.assets[0].base64}`);

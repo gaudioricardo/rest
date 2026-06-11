@@ -35,7 +35,10 @@ export default function InvoiceDetailScreen() {
   if (!invoice) return null;
 
   const items = invoice.items ?? [];
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const subtotal = items.reduce((s, i) => {
+    const v = i.quantity * i.unitPrice;
+    return s + (isFinite(v) ? v : 0);
+  }, 0);
   const tax = subtotal * 0.03;
   const total = invoice.amount;
 

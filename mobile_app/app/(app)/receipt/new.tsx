@@ -64,7 +64,7 @@ export default function NewReceiptScreen() {
     try {
       await createReceipt(userId, {
         client: client.trim(),
-        amount: parseFloat(amount),
+        amount: parseFloat(amount.replace(',', '.')) || 0,
         method: method.en,
         methodPt: method.pt,
         paymentDate,
