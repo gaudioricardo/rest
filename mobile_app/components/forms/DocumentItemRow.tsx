@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { DocumentItem } from '../../shared/types';
+import type { DocumentItem, StockItem } from '../../shared/types';
 import { Colors, Radius, Spacing, FontSize } from '../../shared/theme';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { formatCurrency } from '../../shared/i18n';
@@ -11,16 +11,38 @@ interface Props {
   index: number;
   onChange: (index: number, field: keyof DocumentItem, value: string) => void;
   onRemove: (index: number) => void;
+  stockItems?: StockItem[];
 }
 
-export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemove }) => {
+export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemove, stockItems }) => {
   const dark = useSettingsStore((s) => s.darkMode);
   const palette = dark ? Colors.dark : Colors.light;
 
   const [qtyText, setQtyText] = useState(item.quantity > 0 ? String(item.quantity) : '');
   const [priceText, setPriceText] = useState(item.unitPrice > 0 ? String(item.unitPrice) : '');
+  const [suggestion, setSuggestion] = useState<StockItem | null>(null);
 
   const total = isFinite(item.quantity * item.unitPrice) ? item.quantity * item.unitPrice : 0;
+
+  const handleDescChange = (v: string) => {
+    onChange(index, 'description', v);
+    if (stockItems && v.trim().length >= 1) {
+      const q = v.toLowerCase();
+      const match = stockItems.find((s) => s.name.toLowerCase().startsWith(q));
+      setSuggestion(match && match.name.toLowerCase() !== q ? match : null);
+    } else {
+      setSuggestion(null);
+    }
+  };
+
+  const acceptSuggestion = () => {
+    if (!suggestion) return;
+    onChange(index, 'description', suggestion.name);
+    const p = String(suggestion.price);
+    setPriceText(p);
+    onChange(index, 'unitPrice', p);
+    setSuggestion(null);
+  };
 
   const handleQtyChange = (v: string) => {
     setQtyText(v);
@@ -35,13 +57,34 @@ export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemo
   return (
     <View style={[styles.row, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <View style={styles.top}>
-        <TextInput
-          style={[styles.descInput, { color: palette.text, borderColor: palette.border }]}
-          placeholder="Descrição do item"
-          placeholderTextColor={palette.textMuted}
-          value={item.description}
-          onChangeText={(v) => onChange(index, 'description', v)}
-        />
+        <View style={styles.descCol}>
+          <TextInput
+            style={[styles.descInput, { color: palette.text, borderColor: suggestion ? Colors.secondary : palette.border }]}
+            placeholder="Descrição do item"
+            placeholderTextColor={palette.textMuted}
+            value={item.description}
+            onChangeText={handleDescChange}
+            onBlur={() => { setTimeout(() => setSuggestion(null), 150); }}
+          />
+          {suggestion && (
+            <TouchableOpacity
+              onPress={acceptSuggestion}
+              activeOpacity={0.75}
+              style={[styles.suggestion, { backgroundColor: Colors.secondary + '14', borderColor: Colors.secondary + '50' }]}
+            >
+              <Ionicons name="storefront-outline" size={11} color={Colors.secondary} />
+              <Text numberOfLines={1} style={styles.suggestionText}>
+                <Text style={{ color: palette.textMuted }}>{item.description}</Text>
+                <Text style={{ color: Colors.secondary, fontWeight: '700' }}>
+                  {suggestion.name.slice(item.description.length)}
+                </Text>
+              </Text>
+              <Text style={[styles.suggestionPrice, { color: Colors.secondary }]}>
+                {formatCurrency(suggestion.price)}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <TouchableOpacity onPress={() => onRemove(index)} style={styles.remove}>
           <Ionicons name="close-circle" size={20} color={Colors.error} />
         </TouchableOpacity>
@@ -88,19 +131,40 @@ const styles = StyleSheet.create({
   },
   top: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
   },
-  descInput: {
+  descCol: {
     flex: 1,
+    gap: 4,
+  },
+  descInput: {
     borderWidth: 1,
     borderRadius: Radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: FontSize.sm,
   },
+  suggestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+  },
+  suggestionText: {
+    flex: 1,
+    fontSize: FontSize.xs,
+  },
+  suggestionPrice: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
   remove: {
     padding: 2,
+    marginTop: 6,
   },
   bottom: {
     flexDirection: 'row',

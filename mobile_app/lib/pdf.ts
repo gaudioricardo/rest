@@ -1,27 +1,95 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { Invoice, Quote, Receipt, Expense, CompanySettings, DocumentItem } from '../shared/types';
-import { formatCurrency, numberToWords, formatDate } from '../shared/i18n';
 
 type TaxType = 'none' | 'ispc' | 'iva';
 
-const taxRate = (t: TaxType) => t === 'ispc' ? 0.03 : t === 'iva' ? 0.16 : 0;
-const taxLabel = (t: TaxType) => t === 'ispc' ? 'ISPC 3%' : t === 'iva' ? 'IVA 16%' : '';
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const statusColor = (s: string) => {
-  if (s === 'Paid' || s === 'Pago') return '#16a34a';
-  if (s === 'Overdue' || s === 'Vencido') return '#ba1a1a';
-  return '#d97706';
-};
+function fmtMT(n: number): string {
+  if (!isFinite(n) || isNaN(n)) return '0,00 MT';
+  const fixed = Math.abs(n).toFixed(2);
+  const [integer, decimal] = fixed.split('.');
+  const thousands = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (n < 0 ? '-' : '') + thousands + ',' + decimal + ' MT';
+}
 
-const companyBlock = (c: CompanySettings, secondary?: boolean) => {
-  const co = secondary && c.secondaryCompany ? c.secondaryCompany : c;
-  const logo = (co as any).logoBase64 ?? c.logoBase64;
-  const stamp = (co as any).stampBase64 ?? c.stampBase64;
-  return { co, logo, stamp };
-};
+function resolveCompany(settings: CompanySettings, companyProfileId?: string): CompanySettings {
+  if (companyProfileId === 'secondary' && settings.secondaryCompany) {
+    const s = settings.secondaryCompany;
+    return {
+      ...settings,
+      companyName: s.companyName,
+      nuit: s.nuit,
+      address: s.address,
+      city: s.city,
+      phone: s.phone,
+      email: s.email,
+      logoBase64: s.logoBase64,
+      stampBase64: s.stampBase64,
+      bankAccounts: (s as any).bankAccounts ?? settings.bankAccounts,
+      mobileContacts: (s as any).mobileContacts ?? settings.mobileContacts,
+    };
+  }
+  return settings;
+}
 
-// ─── INVOICE PDF ─────────────────────────────────────────────────────────────
+// ─── Valor por extenso (PT-MZ) ────────────────────────────────────────────────
+
+function _below1000(n: number): string {
+  const ones = ['', 'Um', 'Dois', 'Três', 'Quatro', 'Cinco', 'Seis', 'Sete', 'Oito', 'Nove',
+    'Dez', 'Onze', 'Doze', 'Treze', 'Catorze', 'Quinze', 'Dezasseis', 'Dezassete', 'Dezoito', 'Dezanove'];
+  const tens = ['', '', 'Vinte', 'Trinta', 'Quarenta', 'Cinquenta', 'Sessenta', 'Setenta', 'Oitenta', 'Noventa'];
+  const hundreds = ['', 'Cento', 'Duzentos', 'Trezentos', 'Quatrocentos', 'Quinhentos',
+    'Seiscentos', 'Setecentos', 'Oitocentos', 'Novecentos'];
+  if (n === 0) return '';
+  if (n === 100) return 'Cem';
+  if (n < 20) return ones[n];
+  if (n < 100) { const r = n % 10; return r === 0 ? tens[Math.floor(n / 10)] : `${tens[Math.floor(n / 10)]} e ${ones[r]}`; }
+  const h = Math.floor(n / 100); const r = n % 100;
+  return r === 0 ? hundreds[h] : `${hundreds[h]} e ${_below1000(r)}`;
+}
+
+function _n2w(n: number): string {
+  if (n === 0) return 'Zero';
+  if (n < 1000) return _below1000(n);
+  if (n < 1_000_000) {
+    const t = Math.floor(n / 1000); const r = n % 1000;
+    const tw = t === 1 ? 'Mil' : `${_below1000(t)} Mil`;
+    return r === 0 ? tw : `${tw} e ${_below1000(r)}`;
+  }
+  if (n < 1_000_000_000) {
+    const m = Math.floor(n / 1_000_000); const r = n % 1_000_000;
+    const mw = m === 1 ? 'Um Milhão' : `${_below1000(m)} Milhões`;
+    return r === 0 ? mw : `${mw} e ${_n2w(r)}`;
+  }
+  return String(n);
+}
+
+function amountToWordsPt(amount: number): string {
+  const whole = Math.floor(amount);
+  const cents = Math.round((amount - whole) * 100);
+  const ww = _n2w(whole);
+  const suffix = whole === 1 ? 'Metical' : 'Meticais';
+  if (cents > 0) return `${ww} ${suffix} e ${_n2w(cents)} ${cents === 1 ? 'Centavo' : 'Centavos'}`;
+  return `${ww} ${suffix}`;
+}
+
+function logoImg(base64?: string, size = 90): string {
+  if (!base64) return '';
+  return `<img src="${base64}" style="width:${size}px;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:6px;" />`;
+}
+
+function stampImg(base64?: string): string {
+  if (!base64) return '';
+  return `<img src="${base64}" style="width:100%;height:100%;object-fit:contain;display:block;" />`;
+}
+
+function checkBox(checked: boolean): string {
+  return `<div style="display:inline-block;width:14px;height:14px;border:1.5px solid #000;text-align:center;line-height:12px;font-size:11px;font-weight:bold;vertical-align:middle;margin-right:8px;">${checked ? '✓' : ''}</div>`;
+}
+
+// ─── FACTURA PDF — A5 Horizontal ──────────────────────────────────────────────
 
 export const generateInvoicePdf = async (
   invoice: Invoice,
@@ -30,129 +98,132 @@ export const generateInvoicePdf = async (
   options: { includeStamp?: boolean; taxType?: TaxType } = {}
 ): Promise<string> => {
   const { includeStamp = true, taxType = 'ispc' } = options;
-  const useSecondary = invoice.companyProfileId === 'secondary';
-  const { co, logo, stamp } = companyBlock(settings, useSecondary);
+  const co = resolveCompany(settings, invoice.companyProfileId);
 
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const tax = subtotal * taxRate(taxType);
-  const total = subtotal + tax;
+  const displayItems = items.length > 0
+    ? items
+    : [{ description: invoice.description || 'Serviços prestados', quantity: 1, unitPrice: invoice.amount }];
 
-  const banks = ((co as any).bankAccounts ?? settings.bankAccounts ?? [])
-    .map((b: any) => `<div style="font-size:10px">${b.bank}: <b>${b.iban}</b></div>`)
-    .join('');
-  const mobiles = ((co as any).mobileContacts ?? settings.mobileContacts ?? [])
-    .map((m: any) => `<div style="font-size:10px">${m.provider}: <b>${m.number}</b></div>`)
-    .join('');
+  const subtotal = displayItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
+  const taxAmount = taxType === 'iva' ? subtotal * 0.16 : taxType === 'ispc' ? subtotal * 0.03 : 0;
+  const total = subtotal + taxAmount;
 
-  const itemRows = items.map((it, i) => `
-    <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${i + 1}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${it.quantity}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee">${it.description}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${formatCurrency(it.unitPrice)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right"><b>${formatCurrency(it.quantity * it.unitPrice)}</b></td>
-    </tr>
-  `).join('');
+  const taxRowHtml = taxType === 'none'
+    ? `<div style="display:flex;justify-content:space-between;border-bottom:1.2px dotted #000;padding-bottom:4px;margin-bottom:6px;font-size:12px;color:#000;"><span>Imposto:</span><span>Isento</span></div>`
+    : taxType === 'iva'
+    ? `<div style="display:flex;justify-content:space-between;border-bottom:1.2px dotted #000;padding-bottom:4px;margin-bottom:6px;font-size:12px;color:#000;"><span>IVA 16%:</span><span>${fmtMT(taxAmount)}</span></div>`
+    : `<div style="display:flex;justify-content:space-between;border-bottom:1.2px dotted #000;padding-bottom:4px;margin-bottom:6px;font-size:12px;color:#000;"><span>ISPC 3%:</span><span>${fmtMT(taxAmount)}</span></div>`;
+
+  const exemptionText = taxType === 'iva'
+    ? `<strong>Sujeito a IVA:</strong><br>Taxa legal de 16% sobre o valor líquido.`
+    : `<strong>Motivo de não incidência do IVA:</strong><br>Tributação ISPC, Lei 5/2009 e 12 de Janeiro`;
+
+  const itemRows = displayItems.map((item, i) => `
+    <tr style="height:30px;">
+      <td style="border:1.5px solid #000;padding:4px;text-align:center;font-weight:bold;font-size:12px;">${String(i + 1).padStart(2, '0')}</td>
+      <td style="border:1.5px solid #000;padding:4px;text-align:center;font-weight:bold;font-size:12px;">${item.quantity}</td>
+      <td style="border:1.5px solid #000;padding:4px 8px;text-align:left;font-weight:bold;font-size:12px;">${item.description}</td>
+      <td style="border:1.5px solid #000;padding:4px 8px;text-align:right;font-weight:bold;font-size:12px;">${fmtMT(item.unitPrice)}</td>
+      <td style="border:1.5px solid #000;padding:4px 8px;text-align:right;font-weight:bold;font-size:12px;">${fmtMT(item.quantity * item.unitPrice)}</td>
+    </tr>`).join('');
+
+  const emptyRows = Array.from({ length: Math.max(0, 4 - displayItems.length) }).map(() => `
+    <tr style="height:30px;">
+      <td style="border:1.5px solid #000;"></td><td style="border:1.5px solid #000;"></td>
+      <td style="border:1.5px solid #000;"></td><td style="border:1.5px solid #000;"></td>
+      <td style="border:1.5px solid #000;"></td>
+    </tr>`).join('');
+
+  const statusColor = invoice.status === 'Paid' ? '#16a34a' : invoice.status === 'Overdue' ? '#dc2626' : '#d97706';
 
   const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
+<html><head><meta charset="utf-8"/>
 <style>
-  body{font-family:Arial,sans-serif;font-size:11px;margin:0;padding:0;color:#1b1b1f}
-  .page{width:210mm;padding:16mm 18mm;box-sizing:border-box}
-  table{border-collapse:collapse;width:100%}
-  th{background:#0c1c48;color:white;padding:8px;font-size:10px}
+  @page { size: A5 landscape; margin: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 210mm; height: 148mm; background: #fff; font-family: Arial, Helvetica, sans-serif; }
 </style>
 </head>
 <body>
-<div class="page">
-  <table style="margin-bottom:20px">
-    <tr>
-      <td style="width:50%">
-        ${logo ? `<img src="${logo}" style="height:64px;margin-bottom:8px"/>` : `<div style="font-size:20px;font-weight:bold;color:#0c1c48">${(co as any).companyName || 'EMPRESA'}</div>`}
-        <div style="font-size:11px;color:#555">${(co as any).companyName || ''}</div>
-        <div style="font-size:10px;color:#777">NUIT: ${(co as any).nuit || ''}</div>
-        <div style="font-size:10px;color:#777">${(co as any).address || ''}, ${(co as any).city || ''}</div>
-        <div style="font-size:10px;color:#777">${(co as any).phone || ''} | ${(co as any).email || ''}</div>
-      </td>
-      <td style="text-align:right;vertical-align:top">
-        <div style="font-size:24px;font-weight:bold;color:#0c1c48">FACTURA</div>
-        <div style="font-size:14px;color:#805522;font-weight:bold">${invoice.invoiceNumber}</div>
-        <div style="font-size:10px;color:#777;margin-top:4px">Data: ${formatDate(invoice.issueDate, 'pt')}</div>
-        ${invoice.dueDate ? `<div style="font-size:10px;color:#777">Vencimento: ${formatDate(invoice.dueDate, 'pt')}</div>` : ''}
-        <div style="margin-top:8px;display:inline-block;padding:4px 12px;border-radius:4px;background:${statusColor(invoice.status)};color:white;font-size:10px;font-weight:bold">${invoice.statusPt}</div>
-      </td>
-    </tr>
-  </table>
-
-  <div style="background:#f5f3f7;padding:12px;border-radius:6px;margin-bottom:16px">
-    <div style="font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Cliente</div>
-    <div style="font-size:13px;font-weight:bold">${invoice.client}</div>
-    ${invoice.clientNuit ? `<div style="font-size:10px;color:#555">NUIT: ${invoice.clientNuit}</div>` : ''}
-    ${invoice.clientPhone ? `<div style="font-size:10px;color:#555">Tel: ${invoice.clientPhone}</div>` : ''}
-    ${invoice.clientEmail ? `<div style="font-size:10px;color:#555">Email: ${invoice.clientEmail}</div>` : ''}
-  </div>
-
-  <table style="margin-bottom:16px">
-    <thead>
-      <tr>
-        <th style="width:40px">#</th>
-        <th style="width:50px">Qtd</th>
-        <th>Descrição</th>
-        <th style="width:100px;text-align:right">P. Unit.</th>
-        <th style="width:100px;text-align:right">Total</th>
-      </tr>
-    </thead>
-    <tbody>${itemRows}</tbody>
-  </table>
-
-  <table style="margin-bottom:24px">
-    <tr>
-      <td style="width:60%">
-        <div style="font-size:10px;font-weight:bold;margin-bottom:6px;color:#0c1c48">PAGAMENTO</div>
-        ${banks}
-        ${mobiles}
-      </td>
-      <td style="text-align:right">
-        <div style="border:1px solid #e5e5e5;border-radius:6px;padding:12px;display:inline-block;min-width:180px">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-            <span style="color:#777">Subtotal:</span><span>${formatCurrency(subtotal)}</span>
-          </div>
-          ${taxType !== 'none' ? `
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-            <span style="color:#777">${taxLabel(taxType)}:</span><span>${formatCurrency(tax)}</span>
-          </div>` : ''}
-          <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:2px solid #0c1c48;padding-top:8px">
-            <span>TOTAL:</span><span style="color:#0c1c48">${formatCurrency(total)}</span>
-          </div>
+<div style="width:100%;height:100%;border:2.5px solid #000;padding:15px;display:flex;flex-direction:column;justify-content:space-between;">
+  <div>
+    <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:10px;gap:16px;align-items:flex-start;">
+      <div style="display:flex;gap:12px;align-items:flex-start;width:65%;">
+        ${logoImg(co.logoBase64, 86)}
+        <div style="flex:1;">
+          <h2 style="font-size:16px;font-weight:bold;text-transform:uppercase;color:#000;letter-spacing:-0.3px;line-height:1.2;">${co.companyName || '[Empresa]'}</h2>
+          <p style="font-size:11px;line-height:1.5;margin-top:4px;color:#000;font-weight:bold;">
+            ${[co.address, co.city ? co.city + ' — Moçambique' : ''].filter(Boolean).join(' | ')}<br>
+            ${co.phone ? 'Tel: ' + co.phone : ''} ${co.email ? '| ' + co.email : ''}<br>
+            NUIT: ${co.nuit || '—'}
+          </p>
         </div>
-      </td>
-    </tr>
-  </table>
-
-  ${invoice.notes ? `<div style="margin-bottom:16px;padding:8px;border-left:3px solid #805522;font-size:10px;color:#555">${invoice.notes}</div>` : ''}
-
-  <div style="display:flex;justify-content:space-between;margin-top:24px">
-    <div style="width:200px;border-top:1px dashed #999;text-align:center;padding-top:4px;font-size:10px;color:#777">Assinatura do Cliente</div>
-    <div style="position:relative;text-align:center">
-      ${includeStamp && stamp ? `<img src="${stamp}" style="position:absolute;right:0;bottom:0;width:80px;opacity:0.7;transform:rotate(-4deg)"/>` : ''}
-      <div style="width:200px;border-top:1px dashed #999;text-align:center;padding-top:4px;font-size:10px;color:#777">Emitido por ${(co as any).companyName || ''}</div>
+      </div>
+      <div style="width:33%;text-align:right;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
+        <div style="font-size:15px;font-weight:bold;color:#000;">FACTURA</div>
+        <div style="border:1.5px solid #000;padding:4px 8px;font-size:10.5px;font-weight:bold;background:#fafafa;white-space:nowrap;">${invoice.date}</div>
+        <div style="font-size:14px;font-weight:bold;color:#000;">Nº</div>
+        <div style="border:1.5px solid #000;padding:4px 8px;min-width:80px;text-align:center;font-size:13px;font-weight:900;color:#c2410c;background:#fafafa;">${invoice.invoiceNumber}</div>
+      </div>
+    </div>
+    <div style="border:1.5px solid #000;border-radius:6px;padding:8px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;background:#fafafa;">
+      <div>
+        <span style="font-size:10px;font-weight:bold;color:#333;text-transform:uppercase;margin-right:8px;">CLIENTE / ADQUIRENTE:</span>
+        <strong style="font-size:13.5px;color:#000;">${invoice.client}${invoice.clientNuit ? ' &nbsp;·&nbsp; NUIT: ' + invoice.clientNuit : ''}</strong>
+      </div>
+      <div>
+        <span style="font-size:10px;font-weight:bold;color:#333;text-transform:uppercase;margin-right:8px;">ESTADO:</span>
+        <strong style="font-size:13px;color:${statusColor};text-transform:uppercase;">${invoice.statusPt}</strong>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:#f3f4f6;height:28px;">
+          <th style="border:1.5px solid #000;padding:5px;text-align:center;width:7%;">ITEM</th>
+          <th style="border:1.5px solid #000;padding:5px;text-align:center;width:8%;">QUANT.</th>
+          <th style="border:1.5px solid #000;padding:5px 8px;text-align:left;width:49%;">DESIGNAÇÃO</th>
+          <th style="border:1.5px solid #000;padding:5px 8px;text-align:right;width:18%;">Preço Unitário</th>
+          <th style="border:1.5px solid #000;padding:5px 8px;text-align:right;width:18%;">VALOR</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows}${emptyRows}</tbody>
+    </table>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px;border-top:1.5px solid #000;padding-top:8px;">
+    <div style="width:57%;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:11px;color:#000;line-height:1.4;">${exemptionText}</div>
+      <div style="font-size:11.5px;color:#000;font-weight:bold;display:flex;gap:14px;flex-wrap:wrap;">
+        <span>[&nbsp;&nbsp;] Dinheiro</span>
+        <span>[&nbsp;&nbsp;] Cheque nº __________</span>
+        <span>[&nbsp;&nbsp;] Transferência</span>
+      </div>
+      ${co.bankAccounts?.length ? `<div style="font-size:10px;color:#555;">${co.bankAccounts.map((b: any) => `<span style="margin-right:14px;">${b.bank}: ${b.iban}</span>`).join('')}</div>` : ''}
+    </div>
+    <div style="width:40%;display:flex;flex-direction:column;gap:8px;position:relative;min-height:120px;">
+      <div style="font-size:12px;color:#000;line-height:1.4;border:1.5px solid #000;padding:12px;border-radius:6px;background:#fafafa;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Sub-total:</span><span>${fmtMT(subtotal)}</span></div>
+        ${taxRowHtml}
+        <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;">
+          <span>TOTAL:</span><span style="color:#c2410c;">${fmtMT(total)}</span>
+        </div>
+      </div>
+      <div style="border:1.2px dashed #777;padding:10px 12px 6px;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;min-height:60px;justify-content:flex-end;">
+        <div style="width:80%;border-top:1.2px solid #333;margin-bottom:4px;"></div>
+        <div style="font-size:9px;font-weight:700;color:#333;">Assinatura e Carimbo</div>
+      </div>
+      ${includeStamp && co.stampBase64
+        ? `<div style="position:absolute;left:50%;bottom:5px;transform:translateX(-50%) rotate(-4deg);width:200px;height:100px;z-index:10;">${stampImg(co.stampBase64)}</div>`
+        : ''}
     </div>
   </div>
-
-  <div style="margin-top:24px;text-align:center;font-size:9px;color:#aaa;border-top:1px solid #eee;padding-top:8px">
-    Processado por Computador · ${(co as any).companyName} · NUIT ${(co as any).nuit} · Sistema Rest ERP
-  </div>
 </div>
-</body>
-</html>`;
+</body></html>`;
 
   const { uri } = await Print.printToFileAsync({ html, base64: false });
   return uri;
 };
 
-// ─── QUOTE PDF ───────────────────────────────────────────────────────────────
+// ─── COTAÇÃO PDF — A4 Vertical ────────────────────────────────────────────────
 
 export const generateQuotePdf = async (
   quote: Quote,
@@ -161,186 +232,291 @@ export const generateQuotePdf = async (
   options: { includeStamp?: boolean; taxType?: TaxType } = {}
 ): Promise<string> => {
   const { includeStamp = true, taxType = 'ispc' } = options;
-  const useSecondary = quote.companyProfileId === 'secondary';
-  const { co, logo, stamp } = companyBlock(settings, useSecondary);
+  const co = resolveCompany(settings, quote.companyProfileId);
 
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const tax = subtotal * taxRate(taxType);
-  const total = subtotal + tax;
-  const inWords = numberToWords(total);
+  const displayItems = items.length > 0
+    ? items
+    : [{ description: quote.description || 'Proposta de serviços', quantity: 1, unitPrice: quote.amount }];
 
-  const itemRows = items.map((it, i) => `
-    <tr>
-      <td style="padding:6px 8px;border:1px dotted #ccc">${i + 1}</td>
-      <td style="padding:6px 8px;border:1px dotted #ccc">${it.quantity}</td>
-      <td style="padding:6px 8px;border:1px dotted #ccc">${it.description}</td>
-      <td style="padding:6px 8px;border:1px dotted #ccc;text-align:right">${formatCurrency(it.unitPrice)}</td>
-      <td style="padding:6px 8px;border:1px dotted #ccc;text-align:right"><b>${formatCurrency(it.quantity * it.unitPrice)}</b></td>
-    </tr>
-  `).join('');
+  const subtotal = displayItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
+  const taxAmount = taxType === 'iva' ? subtotal * 0.16 : taxType === 'ispc' ? subtotal * 0.03 : 0;
+  const total = subtotal + taxAmount;
+  const extenso = amountToWordsPt(total);
+
+  const taxRowHtml = taxType === 'none'
+    ? `<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;border-bottom:1.5px dotted #000;padding-bottom:4px;margin-bottom:4px;"><span>Imposto:</span><span>Isento</span></div>`
+    : taxType === 'iva'
+    ? `<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;border-bottom:1.5px dotted #000;padding-bottom:4px;margin-bottom:4px;"><span>IVA 16%:</span><span>${fmtMT(taxAmount)}</span></div>`
+    : `<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;border-bottom:1.5px dotted #000;padding-bottom:4px;margin-bottom:4px;"><span>ISPC 3%:</span><span>${fmtMT(taxAmount)}</span></div>`;
+
+  const exemptionText = taxType === 'iva'
+    ? `<strong>Sujeito a IVA:</strong><br>Taxa legal de 16% sobre o valor líquido.`
+    : `Tributação ISPC, Lei 5/2009 e 12 de Janeiro.<br>Isenção de IVA ao abrigo do regulamento simplificado de pequenos contribuintes (Moçambique).`;
+
+  const itemRows = displayItems.map(item => `
+    <tr style="height:35px;">
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:1.5px dotted #999;padding:6px 10px;font-size:13px;text-align:center;font-weight:bold;color:#000;">${item.quantity}</td>
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:1.5px dotted #999;padding:6px 12px;font-size:13px;text-align:left;font-weight:bold;color:#000;">${item.description}</td>
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:1.5px dotted #999;padding:6px 12px;font-size:13px;text-align:right;font-weight:bold;color:#000;">${fmtMT(item.unitPrice)}</td>
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:1.5px dotted #999;padding:6px 12px;font-size:13px;text-align:right;font-weight:bold;color:#000;">${fmtMT(item.quantity * item.unitPrice)}</td>
+    </tr>`).join('');
+
+  const idleCount = Math.max(1, 8 - displayItems.length);
+  const blankRows = Array.from({ length: idleCount }).map((_, i) => {
+    const b = i === idleCount - 1 ? '2px solid #000' : '1.5px dotted #ccc';
+    return `<tr style="height:38px;">
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:${b};"></td>
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:${b};"></td>
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:${b};"></td>
+      <td style="border-left:2px solid #000;border-right:2px solid #000;border-bottom:${b};"></td>
+    </tr>`;
+  }).join('');
 
   const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"/>
-<style>body{font-family:Arial,sans-serif;font-size:11px;margin:0;padding:0;color:#1b1b1f}.page{width:210mm;padding:16mm 18mm;box-sizing:border-box}table{border-collapse:collapse;width:100%}th{background:#0c1c48;color:white;padding:8px;font-size:10px}</style>
+<html><head><meta charset="utf-8"/>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 210mm; height: 297mm; background: #fff; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+</style>
 </head>
 <body>
-<div class="page">
-  <table style="margin-bottom:20px">
-    <tr>
-      <td style="width:55%">
-        ${logo ? `<img src="${logo}" style="height:64px;margin-bottom:8px"/>` : `<div style="font-size:20px;font-weight:bold;color:#0c1c48">${(co as any).companyName || ''}</div>`}
-        <div style="font-size:10px;color:#777">NUIT: ${(co as any).nuit || ''}</div>
-        <div style="font-size:10px;color:#777">${(co as any).address || ''}, ${(co as any).city || ''}</div>
-      </td>
-      <td style="text-align:right;vertical-align:top">
-        <div style="border:2px solid #0c1c48;padding:8px 16px;display:inline-block;border-radius:4px">
-          <div style="font-size:10px;color:#777">Orçamento Nº</div>
-          <div style="font-size:16px;font-weight:bold;color:#0c1c48">${quote.quoteNumber}</div>
+<div style="width:100%;height:100%;border:3px solid #000;padding:20px;background:#fff;display:flex;flex-direction:column;justify-content:space-between;">
+  <div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:15px;">
+      <div style="border:2px solid #000;border-radius:8px;text-align:center;padding:8px;width:45%;background:#fafafa;">
+        <div style="font-weight:900;font-size:17px;text-transform:uppercase;letter-spacing:1px;color:#000;">COTAÇÃO</div>
+        <div style="font-size:16px;font-weight:900;color:#c2410c;margin-top:4px;font-family:monospace;">N.º ${quote.quoteNumber}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:15px;margin-bottom:15px;align-items:flex-start;">
+      <div style="width:14%;display:flex;align-items:center;justify-content:center;">
+        ${co.logoBase64 ? `<img src="${co.logoBase64}" style="width:100%;max-width:110px;height:auto;object-fit:contain;border:1px solid #e0dfdd;background:#fff;padding:6px;border-radius:12px;" />` : ''}
+      </div>
+      <div style="width:31%;border:2px solid #000;border-radius:8px;padding:12px;text-align:center;background:#fafafa;">
+        <div style="font-weight:900;font-size:13px;text-transform:uppercase;margin-bottom:6px;color:#000;line-height:1.2;">${co.companyName || '[Empresa]'}</div>
+        <div style="font-size:11.5px;line-height:1.4;color:#000;font-weight:bold;">
+          ${co.address ? co.address + '<br>' : ''}
+          ${co.phone ? 'Tel: ' + co.phone + '<br>' : ''}
+          NUIT: ${co.nuit || '—'}<br>
+          ${co.city ? co.city + ' — Moçambique' : 'Moçambique'}
         </div>
-        <div style="font-size:10px;color:#777;margin-top:8px">Data: ${formatDate(quote.issueDate, 'pt')}</div>
-        <div style="font-size:10px;color:#777">Validade: ${quote.validityDays} dias</div>
-      </td>
-    </tr>
-  </table>
-
-  <div style="margin-bottom:16px;display:flex;gap:16px">
-    <div style="flex:1;background:#f5f3f7;padding:12px;border-radius:6px">
-      <div style="font-size:10px;color:#777;margin-bottom:4px">Para:</div>
-      <div style="font-weight:bold">${quote.client}</div>
-      ${quote.clientNuit ? `<div style="font-size:10px">NUIT: ${quote.clientNuit}</div>` : ''}
-      ${quote.clientPhone ? `<div style="font-size:10px">Tel: ${quote.clientPhone}</div>` : ''}
-    </div>
-    <div style="flex:1;background:#f5f3f7;padding:12px;border-radius:6px">
-      <div style="font-size:10px;color:#777;margin-bottom:4px">De:</div>
-      <div style="font-weight:bold">${(co as any).companyName}</div>
-      <div style="font-size:10px">${(co as any).phone || ''}</div>
-      <div style="font-size:10px">${(co as any).email || ''}</div>
-    </div>
-  </div>
-
-  <table style="margin-bottom:16px">
-    <thead>
-      <tr><th>#</th><th>Qtd</th><th>Descrição</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Total</th></tr>
-    </thead>
-    <tbody>${itemRows}</tbody>
-  </table>
-
-  <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
-    <div style="border:1px solid #e5e5e5;border-radius:6px;padding:12px;min-width:200px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="color:#777">Subtotal:</span><span>${formatCurrency(subtotal)}</span>
       </div>
-      ${taxType !== 'none' ? `<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:#777">${taxLabel(taxType)}:</span><span>${formatCurrency(tax)}</span></div>` : ''}
-      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:2px solid #0c1c48;padding-top:8px">
-        <span>TOTAL:</span><span style="color:#0c1c48">${formatCurrency(total)}</span>
+      <div style="width:55%;border:2px solid #000;border-radius:8px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px;">
+        <div style="border-bottom:1.5px dotted #333;padding-bottom:4px;font-size:13px;display:flex;align-items:baseline;">
+          <span style="font-weight:bold;margin-right:6px;white-space:nowrap;">Exmo.(s) Sr.(s):</span>
+          <span style="font-weight:900;color:#000;font-size:14px;">${quote.client}</span>
+        </div>
+        ${quote.clientNuit ? `<div style="border-bottom:1.5px dotted #333;padding-bottom:4px;font-size:13px;display:flex;align-items:baseline;"><span style="font-weight:bold;margin-right:6px;white-space:nowrap;">NUIT:</span><span style="font-family:monospace;font-weight:900;color:#000;">${quote.clientNuit}</span></div>` : ''}
+        ${quote.clientEmail ? `<div style="font-size:12px;display:flex;align-items:baseline;"><span style="font-weight:bold;margin-right:6px;white-space:nowrap;">Email:</span><span style="color:#333;">${quote.clientEmail}</span></div>` : ''}
       </div>
     </div>
-  </div>
-
-  <div style="background:#f5f3f7;padding:8px;border-radius:4px;font-size:10px;margin-bottom:16px">
-    <b>Por extenso:</b> ${inWords}
-  </div>
-
-  ${quote.notes ? `<div style="margin-bottom:16px;padding:8px;border-left:3px solid #805522;font-size:10px;color:#555">${quote.notes}</div>` : ''}
-
-  <div style="display:flex;justify-content:space-between;margin-top:32px">
-    <div style="text-align:center">
-      <div style="width:180px;border-top:1px dashed #999;padding-top:4px;font-size:10px;color:#777">Assinatura do Cliente</div>
+    <div style="display:flex;gap:15px;margin-bottom:20px;">
+      <div style="width:45%;border:2px solid #000;border-radius:8px;text-align:center;font-weight:900;font-size:17px;letter-spacing:2px;padding:8px 0;text-transform:uppercase;background:#fafafa;color:#001;">
+        ${co.city || 'Moçambique'}
+      </div>
+      <div style="width:55%;border:2px solid #000;border-radius:8px;padding:8px 14px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;background:#fff;">
+        Data de Emissão:&nbsp;<strong style="color:#c2410c;">${quote.date}</strong>
+        &nbsp;&nbsp;|&nbsp;&nbsp; Validade:&nbsp;<strong style="color:#c2410c;">${quote.validityDays} dias</strong>
+      </div>
     </div>
-    <div style="text-align:center;position:relative">
-      ${includeStamp && stamp ? `<img src="${stamp}" style="position:absolute;right:8px;bottom:8px;width:72px;opacity:0.7;transform:rotate(-4deg)"/>` : ''}
-      <div style="width:180px;border-top:1px dashed #999;padding-top:4px;font-size:10px;color:#777">${(co as any).companyName}</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:15px;">
+      <thead>
+        <tr style="background:#f3f4f6;height:32px;">
+          <th style="border:2px solid #000;padding:6px;font-size:12px;font-weight:bold;text-transform:uppercase;text-align:center;width:10%;">Quant.</th>
+          <th style="border:2px solid #000;padding:6px 12px;font-size:12px;font-weight:bold;text-transform:uppercase;text-align:left;width:54%;">Designação</th>
+          <th style="border:2px solid #000;padding:6px 12px;font-size:12px;font-weight:bold;text-transform:uppercase;text-align:right;width:18%;">Preço Unit.</th>
+          <th style="border:2px solid #000;padding:6px 12px;font-size:12px;font-weight:bold;text-transform:uppercase;text-align:right;width:18%;">Preço Total</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows}${blankRows}</tbody>
+    </table>
+    <div style="border:2px dotted #666;padding:10px;border-radius:6px;background:#fafafa;">
+      <div style="font-weight:bold;font-size:11px;color:#374151;text-transform:uppercase;">Valor por extenso:</div>
+      <div style="margin-top:6px;font-size:13.5px;font-weight:bold;font-style:italic;color:#111;line-height:1.4;">${extenso}</div>
     </div>
   </div>
-
-  <div style="margin-top:24px;text-align:center;font-size:9px;color:#aaa;border-top:1px solid #eee;padding-top:8px">
-    ${(co as any).companyName} · NUIT ${(co as any).nuit} · Sistema Rest ERP
+  <div>
+    <div style="display:flex;justify-content:space-between;margin-top:15px;gap:15px;">
+      <div style="width:54%;border:2px solid #000;border-radius:8px;padding:10px;background:#fff;">
+        <div style="font-weight:bold;font-size:11px;margin-bottom:8px;color:#000;text-transform:uppercase;">Motivos de Justificação da não Aplicação do Imposto:</div>
+        <div style="font-size:12px;line-height:1.5;font-weight:bold;color:#374151;">${exemptionText}</div>
+      </div>
+      <div style="width:44%;display:flex;flex-direction:column;gap:5px;justify-content:center;border:2px solid #000;padding:10px;border-radius:8px;background:#fafafa;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#333;"><span>Sub-Total:</span><span>${fmtMT(subtotal)}</span></div>
+        ${taxRowHtml}
+        <div style="display:flex;justify-content:space-between;font-weight:900;font-size:15px;color:#000;"><span>TOTAL:</span><span style="color:#c2410c;">${fmtMT(total)}</span></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:20px;padding-top:10px;border-top:1.5px solid #eaeaea;position:relative;min-height:110px;">
+      <div style="width:50%;font-size:9px;color:#6b7280;font-weight:bold;line-height:1.4;display:flex;flex-direction:column;justify-content:flex-end;">
+        <span>Documento informativo de cotação oficial.</span>
+        ${co.email ? `<span>${co.email}</span>` : ''}
+      </div>
+      <div style="width:45%;display:flex;flex-direction:column;align-items:center;position:relative;">
+        ${includeStamp && co.stampBase64
+          ? `<div style="position:absolute;right:30px;top:-10px;width:260px;height:110px;transform:rotate(-3deg);z-index:10;">${stampImg(co.stampBase64)}</div>`
+          : ''}
+        <div style="width:100%;border-top:1.5px solid #000;text-align:center;padding-top:6px;font-size:13px;font-weight:bold;color:#000;margin-top:70px;">Assinatura e Carimbo</div>
+      </div>
+    </div>
   </div>
 </div>
-</body>
-</html>`;
+</body></html>`;
 
   const { uri } = await Print.printToFileAsync({ html, base64: false });
   return uri;
 };
 
-// ─── RECEIPT PDF ─────────────────────────────────────────────────────────────
+// ─── RECIBO PDF — A5 Horizontal ───────────────────────────────────────────────
 
 export const generateReceiptPdf = async (
   receipt: Receipt,
   settings: CompanySettings,
-  options: { includeStamp?: boolean } = {}
+  options: { includeStamp?: boolean } = {},
+  relatedQuotes?: Quote[]
 ): Promise<string> => {
-  const { includeStamp = true } = options;
-  const useSecondary = receipt.companyProfileId === 'secondary';
-  const { co, logo, stamp } = companyBlock(settings, useSecondary);
-  const inWords = numberToWords(receipt.amount);
+  const co = resolveCompany(settings, receipt.companyProfileId);
+
+  let dayStr = '__', monthStr = '_____________', yearStr = '20__';
+  try {
+    const d = new Date(receipt.paymentDate + 'T00:00:00');
+    if (!isNaN(d.getTime())) {
+      dayStr = String(d.getDate()).padStart(2, '0');
+      const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      monthStr = months[d.getMonth()];
+      yearStr = String(d.getFullYear());
+    }
+  } catch {}
+
+  const extenso = amountToWordsPt(receipt.amount);
+  const city = co.city || 'Moçambique';
+
+  const quoteRefs = relatedQuotes?.length
+    ? ' / Cotação ' + relatedQuotes.map(q => q.quoteNumber).join(', ')
+    : '';
+  const invoiceRefDisplay = receipt.invoiceRef && receipt.invoiceRef !== '—'
+    ? receipt.invoiceRef + quoteRefs
+    : quoteRefs || '—';
+
+  const method = receipt.method;
+  const isCash = method === 'Cash';
+  const isBank = method === 'Bank Transfer';
+  const isMobile = ['M-Pesa', 'E-Mola', 'Movitel', 'Vodacom'].includes(method);
+
+  const bankDetail = isBank && co.bankAccounts?.length
+    ? co.bankAccounts.map((b: any) => `${b.bank}: ${b.iban}`).join(' | ')
+    : isBank ? '___________________________' : '';
+
+  const mobileDetail = isMobile
+    ? (co.mobileContacts?.find((m: any) => m.provider === method)?.number || method)
+    : '';
 
   const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"/>
-<style>body{font-family:Arial,sans-serif;font-size:11px;margin:0;padding:0;color:#1b1b1f}.page{width:210mm;padding:14mm 18mm;box-sizing:border-box}.dotted{border-bottom:1px dashed #999;min-width:200px;display:inline-block;padding-bottom:2px}</style>
+<html><head><meta charset="utf-8"/>
+<style>
+  @page { size: A5 landscape; margin: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 210mm; height: 148mm; background: #fff; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; }
+</style>
 </head>
 <body>
-<div class="page">
-  <div style="text-align:center;margin-bottom:20px">
-    ${logo ? `<img src="${logo}" style="height:56px;margin-bottom:8px"/>` : ''}
-    <div style="font-size:13px;font-weight:bold;color:#0c1c48">${(co as any).companyName}</div>
-    <div style="font-size:10px;color:#777">NUIT: ${(co as any).nuit} · ${(co as any).address}, ${(co as any).city}</div>
-    <div style="font-size:10px;color:#777">${(co as any).phone} · ${(co as any).email}</div>
-  </div>
+<div style="width:100%;height:100%;padding:20px;">
+  <div style="width:100%;height:100%;border:1.5px solid #222;padding:22px;background:#fff;display:flex;flex-direction:column;justify-content:space-between;position:relative;">
 
-  <div style="text-align:center;margin-bottom:20px">
-    <div style="font-size:20px;font-weight:bold;color:#ba1a1a">RECIBO</div>
-    <div style="font-size:14px;font-weight:bold;color:#ba1a1a">${receipt.receiptNumber}</div>
-  </div>
-
-  <div style="font-size:22px;font-weight:bold;color:#ba1a1a;text-align:center;margin-bottom:20px">
-    ${formatCurrency(receipt.amount)}
-  </div>
-
-  <div style="margin-bottom:12px">
-    <span>Recebemos de: </span><span class="dotted">${receipt.client}</span>
-  </div>
-  <div style="margin-bottom:12px">
-    <span>A quantia de: </span><span class="dotted">${inWords}</span>
-  </div>
-  <div style="margin-bottom:12px">
-    <span>Referente à Factura: </span><span class="dotted">${receipt.invoiceRef || '—'}</span>
-  </div>
-  <div style="margin-bottom:12px">
-    <span>Data: </span><span class="dotted">${formatDate(receipt.paymentDate, 'pt')}</span>
-  </div>
-
-  <div style="margin-bottom:20px">
-    <span>Forma de Pagamento: </span><b>${receipt.methodPt || receipt.method}</b>
-  </div>
-
-  ${receipt.notes ? `<div style="margin-bottom:16px;padding:8px;border-left:3px solid #805522;font-size:10px">${receipt.notes}</div>` : ''}
-
-  <div style="display:flex;justify-content:space-between;margin-top:32px">
-    <div style="text-align:center">
-      <div style="width:160px;border-top:1px dashed #999;padding-top:4px;font-size:10px;color:#777">Assinatura do Cliente</div>
+    <div style="display:flex;width:100%;gap:16px;align-items:flex-start;margin-bottom:16px;">
+      <div style="display:flex;gap:12px;align-items:flex-start;width:60%;">
+        ${co.logoBase64 ? `<img src="${co.logoBase64}" style="width:90px;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:8px;" />` : ''}
+        <div>
+          <div style="font-weight:bold;font-size:11pt;text-transform:uppercase;margin-bottom:4px;letter-spacing:0.5px;line-height:1.2;">${co.companyName || '[Empresa]'}</div>
+          <div style="font-size:8.5pt;line-height:1.5;color:#333;">
+            ${co.address ? co.address + '<br>' : ''}
+            ${co.phone ? 'Tel: ' + co.phone + '<br>' : ''}
+            NUIT: ${co.nuit || '—'}<br>
+            ${co.city ? co.city + ' — Moçambique' : 'Moçambique'}
+          </div>
+        </div>
+      </div>
+      <div style="width:38%;display:flex;flex-direction:column;align-items:flex-end;">
+        <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+          <span style="font-weight:bold;font-size:15pt;text-transform:uppercase;letter-spacing:1.5px;">Recibo</span>
+          <div style="border:1.5px solid #111;padding:7px 11px;min-width:130px;background:#fff;display:flex;align-items:center;gap:4px;">
+            <span style="color:#cc0000;font-weight:bold;font-size:9pt;">N.º</span>
+            <span style="font-weight:bold;color:#cc0000;font-family:monospace;font-size:11pt;">${receipt.receiptNumber}</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="border:1.5px solid #111;padding:6px 11px;min-width:180px;text-align:right;font-weight:bold;font-size:12pt;color:#cc0000;font-family:monospace;">${fmtMT(receipt.amount)}</div>
+        </div>
+      </div>
     </div>
-    <div style="text-align:center;position:relative">
-      ${includeStamp && stamp ? `<img src="${stamp}" style="position:absolute;right:4px;bottom:4px;width:72px;opacity:0.7;transform:rotate(-3deg)"/>` : ''}
-      <div style="width:160px;border-top:1px dashed #999;padding-top:4px;font-size:10px;color:#777">${(co as any).companyName}</div>
-    </div>
-  </div>
 
-  <div style="margin-top:20px;text-align:center;font-size:9px;color:#aaa;border-top:1px solid #eee;padding-top:6px">
-    Processado por Computador · Sistema Rest ERP
+    <div style="line-height:2.1;">
+      <div style="margin-bottom:10px;position:relative;min-height:28px;">
+        <div style="border-bottom:1.5px dotted #555;position:absolute;left:0;right:0;bottom:4px;"></div>
+        <span style="background:#fff;padding-right:8px;position:relative;font-size:10.5pt;">
+          Recebemos do (a) Exmo. Sr.(a).&nbsp;<strong style="font-size:11pt;text-transform:uppercase;">${receipt.client}</strong>
+        </span>
+      </div>
+      <div style="margin-bottom:6px;position:relative;min-height:28px;">
+        <div style="border-bottom:1.5px dotted #555;position:absolute;left:0;right:0;bottom:4px;"></div>
+        <span style="background:#fff;padding-right:8px;position:relative;font-size:10.5pt;">
+          a quantia de&nbsp;<strong style="font-size:10pt;font-style:italic;color:#333;">${extenso}</strong>
+        </span>
+      </div>
+      <div style="border-bottom:1.5px dotted #555;margin:12px 0 6px;height:1px;"></div>
+      <div style="margin-top:14px;margin-bottom:6px;position:relative;min-height:28px;">
+        <div style="border-bottom:1.5px dotted #555;position:absolute;left:0;right:0;bottom:4px;"></div>
+        <span style="background:#fff;padding-right:8px;position:relative;font-size:10.5pt;">
+          referente ao pagamento da factura&nbsp;<span style="background:#f3f4f6;padding:3px 7px;border-radius:6px;font-size:10pt;font-weight:bold;">${invoiceRefDisplay}</span>
+        </span>
+      </div>
+      <div style="border-bottom:1.5px dotted #555;margin:12px 0 6px;height:1px;"></div>
+      <div style="margin-top:18px;display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-size:10.5pt;font-weight:bold;">de que passamos o presente recibo.</span>
+        <span style="font-size:10pt;font-weight:bold;">${city}, ${dayStr}&nbsp;de&nbsp;${monthStr}&nbsp;de&nbsp;${yearStr}</span>
+      </div>
+    </div>
+
+    <div style="display:table;width:100%;margin-top:20px;">
+      <div style="display:table-row;">
+        <div style="display:table-cell;width:55%;vertical-align:top;">
+          <div style="font-size:10pt;font-weight:bold;margin-bottom:8px;text-transform:uppercase;color:#444;letter-spacing:0.5px;">Pago em:</div>
+          <div style="display:flex;align-items:center;margin-bottom:10px;">
+            ${checkBox(isBank)}<span style="font-size:10pt;">Transferência Bancária</span>
+            ${bankDetail ? `<span style="font-family:monospace;font-size:9pt;margin-left:8px;color:#555;">${bankDetail}</span>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;margin-bottom:10px;">
+            ${checkBox(isMobile)}<span style="font-size:10pt;">Carteira Móvel (M-Pesa / E-Mola)</span>
+            ${mobileDetail ? `<span style="font-family:monospace;font-size:9pt;margin-left:8px;color:#555;">${mobileDetail}</span>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;">
+            ${checkBox(isCash)}<span style="font-size:10pt;">Numerário (Dinheiro)</span>
+          </div>
+        </div>
+        <div style="display:table-cell;width:45%;text-align:center;vertical-align:bottom;padding-bottom:5px;">
+          <div style="display:inline-block;width:240px;border:1.5px dashed #777;padding:14px 12px 6px;text-align:center;background:#fafafa;position:relative;overflow:visible;">
+            ${co.stampBase64
+              ? `<div style="position:absolute;left:50%;top:-45px;transform:translateX(-50%) rotate(-3deg);width:260px;height:110px;z-index:10;">${stampImg(co.stampBase64)}</div>`
+              : ''}
+            <div style="border-top:1.5px solid #333;padding-top:5px;font-size:8.5pt;font-weight:bold;color:#333;">Assinatura e Carimbo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;border-top:1.2px solid #e0e0e0;padding-top:6px;font-size:6.5pt;color:#777;text-transform:uppercase;letter-spacing:0.2px;">
+      Processado por Computador • ERP Código AT/MZ • ${co.companyName} — NUIT: ${co.nuit}
+    </div>
   </div>
 </div>
-</body>
-</html>`;
+</body></html>`;
 
   const { uri } = await Print.printToFileAsync({ html, base64: false });
   return uri;
 };
 
-// ─── FINANCIAL REPORT PDF ────────────────────────────────────────────────────
+// ─── RELATÓRIO FINANCEIRO — A4 Horizontal ─────────────────────────────────────
 
 export const generateReportPdf = async (
   settings: CompanySettings,
@@ -349,64 +525,81 @@ export const generateReportPdf = async (
   receipts: Receipt[],
   expenses: Expense[]
 ): Promise<string> => {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('pt-MZ', { year: 'numeric', month: 'long', day: 'numeric' }) || now.toLocaleDateString();
+
   const totalInvoiced = invoices.reduce((s, i) => s + i.amount, 0);
-  const totalPaid = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
-  const totalPending = invoices.filter(i => i.status !== 'Paid').reduce((s, i) => s + i.amount, 0);
+  const totalPaid     = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
+  const totalPending  = invoices.filter(i => i.status !== 'Paid').reduce((s, i) => s + i.amount, 0);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
 
+  const sc = (s: string) => s === 'Paid' || s === 'Pago' || s === 'Aprovado' ? '#16a34a'
+    : s === 'Overdue' || s === 'Vencido' || s === 'Rejeitado' ? '#dc2626' : '#d97706';
+
   const invRows = invoices.slice(0, 20).map(inv => `
-    <tr>
-      <td style="padding:5px 8px;border-bottom:1px solid #eee">${inv.invoiceNumber}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid #eee">${inv.client}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid #eee">${formatDate(inv.issueDate, 'pt')}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${formatCurrency(inv.amount)}</td>
-      <td style="padding:5px 8px;border-bottom:1px solid #eee;color:${statusColor(inv.status)}">${inv.statusPt}</td>
-    </tr>
-  `).join('');
+    <tr><td>${inv.invoiceNumber}</td><td>${inv.client}</td><td>${inv.date}</td>
+    <td>${inv.dueDate || '—'}</td>
+    <td style="text-align:right;font-weight:bold;">${fmtMT(inv.amount)}</td>
+    <td style="color:${sc(inv.status)};font-weight:bold;">${inv.statusPt}</td></tr>`).join('');
+
+  const qtRows = quotes.slice(0, 10).map(q => `
+    <tr><td>${q.quoteNumber}</td><td>${q.client}</td><td>${q.date}</td>
+    <td>${q.validityDays} dias</td>
+    <td style="text-align:right;font-weight:bold;">${fmtMT(q.amount)}</td>
+    <td style="color:${sc(q.status)};font-weight:bold;">${q.statusPt}</td></tr>`).join('');
+
+  const recRows = receipts.slice(0, 10).map(r => `
+    <tr><td>${r.receiptNumber}</td><td>${r.client}</td><td>${r.date}</td>
+    <td>${r.invoiceRef || '—'}</td><td>${r.methodPt || r.method}</td>
+    <td style="text-align:right;font-weight:bold;">${fmtMT(r.amount)}</td></tr>`).join('');
 
   const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"/>
-<style>body{font-family:Arial,sans-serif;font-size:11px;margin:0;padding:0}.page{padding:16mm;box-sizing:border-box}table{border-collapse:collapse;width:100%;margin-bottom:24px}th{background:#0c1c48;color:white;padding:8px;font-size:10px;text-align:left}.kpi{display:inline-block;width:22%;padding:12px;margin:4px;border-radius:6px;text-align:center}</style>
+<html><head><meta charset="utf-8"/>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #1b1b1f; background: #fff; }
+  h2 { font-size: 18px; text-align: center; color: #0c1c48; margin-bottom: 4px; }
+  .sub { text-align: center; font-size: 11px; color: #777; margin-bottom: 16px; }
+  .kpis { display: flex; gap: 10px; margin-bottom: 18px; }
+  .kpi { flex: 1; padding: 10px; border-radius: 6px; text-align: center; }
+  .kpi-label { font-size: 9px; color: #555; margin-bottom: 4px; }
+  .kpi-value { font-size: 13px; font-weight: bold; }
+  .sec { font-size: 11px; font-weight: bold; color: #0c1c48; margin: 12px 0 5px; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9px; }
+  th { background: #0c1c48; color: #fff; padding: 5px 7px; text-align: left; }
+  td { padding: 4px 7px; border-bottom: 1px solid #eee; }
+  tr:nth-child(even) td { background: #f8f8fc; }
+  .empty { text-align: center; padding: 8px; color: #777; }
+  .footer { margin-top: 16px; border-top: 1px solid #eee; padding-top: 5px; font-size: 7px; color: #aaa; text-align: center; }
+</style>
 </head>
 <body>
-<div class="page">
-  <div style="text-align:center;margin-bottom:24px">
-    <div style="font-size:22px;font-weight:bold;color:#0c1c48">RELATÓRIO FINANCEIRO</div>
-    <div style="font-size:12px;color:#777">${settings.companyName} · ${new Date().toLocaleDateString('pt-MZ')}</div>
+  <h2>RELATÓRIO FINANCEIRO</h2>
+  <div class="sub">${settings.companyName || ''} — ${dateStr}</div>
+  <div class="kpis">
+    <div class="kpi" style="background:#e0f2fe;"><div class="kpi-label">Total Facturado</div><div class="kpi-value" style="color:#0c1c48;">${fmtMT(totalInvoiced)}</div></div>
+    <div class="kpi" style="background:#dcfce7;"><div class="kpi-label">Total Recebido</div><div class="kpi-value" style="color:#16a34a;">${fmtMT(totalPaid)}</div></div>
+    <div class="kpi" style="background:#fef9c3;"><div class="kpi-label">Total Pendente</div><div class="kpi-value" style="color:#d97706;">${fmtMT(totalPending)}</div></div>
+    <div class="kpi" style="background:#fee2e2;"><div class="kpi-label">Total Despesas</div><div class="kpi-value" style="color:#dc2626;">${fmtMT(totalExpenses)}</div></div>
   </div>
-
-  <div style="margin-bottom:24px;display:flex;gap:12px;flex-wrap:wrap">
-    <div class="kpi" style="background:#e0f2fe">
-      <div style="font-size:10px;color:#555">Total Facturado</div>
-      <div style="font-size:16px;font-weight:bold;color:#0c1c48">${formatCurrency(totalInvoiced)}</div>
-    </div>
-    <div class="kpi" style="background:#dcfce7">
-      <div style="font-size:10px;color:#555">Total Pago</div>
-      <div style="font-size:16px;font-weight:bold;color:#16a34a">${formatCurrency(totalPaid)}</div>
-    </div>
-    <div class="kpi" style="background:#fef9c3">
-      <div style="font-size:10px;color:#555">Total Pendente</div>
-      <div style="font-size:16px;font-weight:bold;color:#d97706">${formatCurrency(totalPending)}</div>
-    </div>
-    <div class="kpi" style="background:#fee2e2">
-      <div style="font-size:10px;color:#555">Total Despesas</div>
-      <div style="font-size:16px;font-weight:bold;color:#ba1a1a">${formatCurrency(totalExpenses)}</div>
-    </div>
-  </div>
-
-  <div style="font-size:13px;font-weight:bold;color:#0c1c48;margin-bottom:8px">Facturas</div>
+  <div class="sec">Facturas Emitidas</div>
   <table>
-    <thead><tr><th>Nº</th><th>Cliente</th><th>Data</th><th>Valor</th><th>Estado</th></tr></thead>
-    <tbody>${invRows || '<tr><td colspan="5" style="text-align:center;padding:12px;color:#777">Sem registos</td></tr>'}</tbody>
+    <thead><tr><th>Nº Factura</th><th>Cliente</th><th>Data</th><th>Vencimento</th><th>Valor</th><th>Estado</th></tr></thead>
+    <tbody>${invRows || `<tr><td colspan="6" class="empty">Sem registos</td></tr>`}</tbody>
   </table>
-
-  <div style="margin-top:24px;text-align:center;font-size:9px;color:#aaa">
-    Gerado em ${new Date().toLocaleString('pt-MZ')} · Sistema Rest ERP
-  </div>
-</div>
-</body>
-</html>`;
+  <div class="sec">Cotações Emitidas</div>
+  <table>
+    <thead><tr><th>Nº Cotação</th><th>Cliente</th><th>Data</th><th>Validade</th><th>Valor</th><th>Estado</th></tr></thead>
+    <tbody>${qtRows || `<tr><td colspan="6" class="empty">Sem registos</td></tr>`}</tbody>
+  </table>
+  <div class="sec">Recibos Emitidos</div>
+  <table>
+    <thead><tr><th>Nº Recibo</th><th>Cliente</th><th>Data</th><th>Ref. Factura</th><th>Método</th><th>Valor</th></tr></thead>
+    <tbody>${recRows || `<tr><td colspan="6" class="empty">Sem registos</td></tr>`}</tbody>
+  </table>
+  <div class="footer">Processado por Computador • ERP Código AT/MZ • ${settings.companyName} — NUIT: ${settings.nuit} • ${now.toLocaleString()}</div>
+</body></html>`;
 
   const { uri } = await Print.printToFileAsync({ html, base64: false });
   return uri;

@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../../stores/authStore';
 import { useDataStore } from '../../../stores/dataStore';
@@ -15,31 +15,44 @@ import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { DocumentItemRow } from '../../../components/forms/DocumentItemRow';
 import { useToast } from '../../../components/ui/ToastContainer';
-import { createQuote } from '../../../lib/db';
+import { updateQuote } from '../../../lib/db';
 import type { DocumentItem } from '../../../shared/types';
 
-export default function NewQuoteScreen() {
+export default function EditQuoteScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { showToast } = useToast();
   const { userId } = useAuthStore();
-  const { loadQuotes, loadClients, stockItems } = useDataStore();
+  const { quotes, loadQuotes, stockItems } = useDataStore();
   const { language, darkMode, company } = useSettingsStore();
 
   const palette = darkMode ? Colors.dark : Colors.light;
   const lang = language;
 
-  const [client, setClient] = useState('');
-  const [clientNuit, setClientNuit] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
-  const [clientEmail, setClientEmail] = useState('');
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
-  const [validityDays, setValidityDays] = useState('15');
-  const [notes, setNotes] = useState('');
-  const [useSecondary, setUseSecondary] = useState(false);
-  const [items, setItems] = useState<DocumentItem[]>([
-    { description: '', quantity: 1, unitPrice: 0 },
-  ]);
+  const quote = quotes.find((q) => q.id === id);
+
+  const [client, setClient] = useState(quote?.client ?? '');
+  const [clientNuit, setClientNuit] = useState(quote?.clientNuit ?? '');
+  const [clientPhone, setClientPhone] = useState(quote?.clientPhone ?? '');
+  const [clientEmail, setClientEmail] = useState(quote?.clientEmail ?? '');
+  const [issueDate, setIssueDate] = useState(quote?.issueDate ?? new Date().toISOString().slice(0, 10));
+  const [validityDays, setValidityDays] = useState(String(quote?.validityDays ?? 15));
+  const [notes, setNotes] = useState(quote?.notes ?? '');
+  const [useSecondary, setUseSecondary] = useState(quote?.companyProfileId === 'secondary');
+  const [items, setItems] = useState<DocumentItem[]>(
+    quote?.items && quote.items.length > 0
+      ? quote.items
+      : [{ description: '', quantity: 1, unitPrice: 0 }]
+  );
   const [loading, setLoading] = useState(false);
+
+  if (!quote) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+        <Text style={{ color: palette.text, padding: Spacing.md }}>Orçamento não encontrado.</Text>
+      </SafeAreaView>
+    );
+  }
 
   const subtotal = items.reduce((s, i) => {
     const v = i.quantity * i.unitPrice;
@@ -60,16 +73,16 @@ export default function NewQuoteScreen() {
     });
   };
 
-  const handleSubmit = async () => {
+  const handleSave = async () => {
     if (!client.trim()) {
-      showToast('Erro', 'Insira o nome do cliente', 'error');
+      showToast('Erro', lang === 'pt' ? 'Insira o nome do cliente' : 'Enter client name', 'error');
       return;
     }
     if (!userId) return;
     setLoading(true);
     try {
-      await createQuote(
-        userId,
+      await updateQuote(
+        quote.id,
         {
           client: client.trim(),
           clientNuit: clientNuit || undefined,
@@ -78,15 +91,17 @@ export default function NewQuoteScreen() {
           issueDate,
           validityDays: parseInt(validityDays) || 15,
           amount: total,
-          status: 'Pending',
           companyProfileId: useSecondary ? 'secondary' : 'primary',
           notes: notes || undefined,
         },
         items.filter((i) => i.description.trim())
       );
       await loadQuotes(userId);
-      await loadClients(userId);
-      showToast(lang === 'pt' ? 'Orçamento criado' : 'Quote created', undefined, 'success');
+      showToast(
+        lang === 'pt' ? 'Orçamento actualizado' : 'Quote updated',
+        undefined,
+        'success'
+      );
       router.back();
     } catch (e) {
       showToast('Erro', String(e), 'error');
@@ -101,8 +116,10 @@ export default function NewQuoteScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="close" size={24} color={palette.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: palette.text }]}>{tr(lang, 'newQuote')}</Text>
-        <Button title={tr(lang, 'save')} onPress={handleSubmit} loading={loading} size="sm" />
+        <Text style={[styles.title, { color: palette.text }]}>
+          {lang === 'pt' ? 'Editar Orçamento' : 'Edit Quote'}
+        </Text>
+        <Button title={tr(lang, 'save')} onPress={handleSave} loading={loading} size="sm" />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -114,7 +131,11 @@ export default function NewQuoteScreen() {
                 <Text style={[styles.switchLabel, { color: palette.textSecondary }]}>
                   {useSecondary ? company.secondaryCompany.companyName : company.companyName}
                 </Text>
-                <Switch value={useSecondary} onValueChange={setUseSecondary} trackColor={{ true: Colors.secondary, false: palette.border }} />
+                <Switch
+                  value={useSecondary}
+                  onValueChange={setUseSecondary}
+                  trackColor={{ true: Colors.secondary, false: palette.border }}
+                />
               </View>
             </View>
           )}
@@ -136,9 +157,16 @@ export default function NewQuoteScreen() {
           <View style={[styles.section, { borderColor: palette.border }]}>
             <Text style={[styles.sectionTitle, { color: palette.text }]}>Itens</Text>
             {items.map((item, i) => (
-              <DocumentItemRow key={i} item={item} index={i} onChange={handleItemChange} stockItems={stockItems} onRemove={(idx) => {
-                if (items.length > 1) setItems((p) => p.filter((_, ii) => ii !== idx));
-              }} />
+              <DocumentItemRow
+                key={i}
+                item={item}
+                index={i}
+                onChange={handleItemChange}
+                onRemove={(idx) => {
+                  if (items.length > 1) setItems((p) => p.filter((_, ii) => ii !== idx));
+                }}
+                stockItems={stockItems}
+              />
             ))}
             <TouchableOpacity
               onPress={() => setItems((p) => [...p, { description: '', quantity: 1, unitPrice: 0 }])}
@@ -165,7 +193,15 @@ export default function NewQuoteScreen() {
           </View>
 
           <View style={[styles.section, { borderColor: palette.border }]}>
-            <Input label={tr(lang, 'notes')} value={notes} onChangeText={setNotes} placeholder="Observações (opcional)" multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top' }} />
+            <Input
+              label={tr(lang, 'notes')}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Observações (opcional)"
+              multiline
+              numberOfLines={3}
+              style={{ height: 80, textAlignVertical: 'top' }}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

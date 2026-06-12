@@ -35,7 +35,7 @@ export interface Transaction {
 export interface Invoice {
   id: string;
   seqNumber: number;           // from seq_number in DB
-  invoiceNumber: string;       // formatted: "INV-0001"
+  invoiceNumber: string;       // formatted: "FAC-0001"
   client: string;
   clientNuit?: string;
   clientPhone?: string;
@@ -58,7 +58,7 @@ export interface Invoice {
 export interface Quote {
   id: string;
   seqNumber: number;
-  quoteNumber: string;         // formatted: "QT-0001"
+  quoteNumber: string;         // formatted: "COT-0001"
   client: string;
   clientNuit?: string;
   clientPhone?: string;

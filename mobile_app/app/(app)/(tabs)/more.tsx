@@ -129,7 +129,7 @@ export default function MoreScreen() {
           <MenuItem
             icon="settings-outline"
             label={tr(lang, 'settings')}
-            onPress={() => router.push('/(app)/settings/index')}
+            onPress={() => router.push('/(app)/settings' as any)}
             color="#0369a1"
           />
         </View>

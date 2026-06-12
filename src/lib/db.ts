@@ -8,7 +8,7 @@ import { Invoice, Quote, Receipt, Expense, StockItem, Contact, DocumentItem, Com
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Format a sequential number into document reference, e.g. "INV-0001" */
+/** Format a sequential number into document reference, e.g. "FAC-0001" */
 export function formatDocNumber(prefix: string, seqNumber: number): string {
   return `${prefix}-${String(seqNumber).padStart(4, '0')}`;
 }
@@ -63,7 +63,7 @@ export function mapInvoice(row: Record<string, unknown>): Invoice {
   return {
     id: row.id as string,
     seqNumber,
-    invoiceNumber: formatDocNumber('INV', seqNumber),
+    invoiceNumber: formatDocNumber('FAC', seqNumber),
     client: row.client as string,
     clientNuit: (row.client_nuit as string | undefined) ?? undefined,
     clientPhone: (row.client_phone as string | undefined) ?? undefined,
@@ -91,7 +91,7 @@ export function mapQuote(row: Record<string, unknown>): Quote {
   return {
     id: row.id as string,
     seqNumber,
-    quoteNumber: formatDocNumber('QT', seqNumber),
+    quoteNumber: formatDocNumber('COT', seqNumber),
     client: row.client as string,
     clientNuit: (row.client_nuit as string | undefined) ?? undefined,
     clientPhone: (row.client_phone as string | undefined) ?? undefined,
@@ -547,6 +547,33 @@ export async function deleteStockItem(id: string): Promise<boolean> {
     return !error;
   } catch {
     return false;
+  }
+}
+
+export async function decrementStockForInvoice(userId: string, invoiceId: string): Promise<void> {
+  try {
+    const { data: items } = await supabase
+      .from('invoice_items')
+      .select('description, quantity')
+      .eq('invoice_id', invoiceId);
+    if (!items || items.length === 0) return;
+    for (const item of items) {
+      if (!item.description || !(item.quantity > 0)) continue;
+      const { data: stock } = await supabase
+        .from('stock_items')
+        .select('id, stock_level')
+        .eq('user_id', userId)
+        .ilike('name', item.description)
+        .maybeSingle();
+      if (stock) {
+        await supabase
+          .from('stock_items')
+          .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - item.quantity) })
+          .eq('id', stock.id);
+      }
+    }
+  } catch {
+    // silently skip if stock decrement fails — receipt is already created
   }
 }
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useFonts, PlayfairDisplay_400Regular, PlayfairDisplay_600SemiBold, PlayfairDisplay_700Bold, PlayfairDisplay_400Regular_Italic } from '@expo-google-fonts/playfair-display';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -82,10 +82,10 @@ export default function RootLayout() {
   const { initPrefs } = useSettingsStore();
 
   const [fontsLoaded] = useFonts({
-    PlayfairDisplay_400Regular,
-    PlayfairDisplay_600SemiBold,
-    PlayfairDisplay_700Bold,
-    PlayfairDisplay_400Regular_Italic,
+    PlayfairDisplay_400Regular: require('../assets/fonts/PlayfairDisplay_400Regular.ttf'),
+    PlayfairDisplay_600SemiBold: require('../assets/fonts/PlayfairDisplay_600SemiBold.ttf'),
+    PlayfairDisplay_700Bold: require('../assets/fonts/PlayfairDisplay_700Bold.ttf'),
+    PlayfairDisplay_400Regular_Italic: require('../assets/fonts/PlayfairDisplay_400Regular_Italic.ttf'),
   });
 
   useEffect(() => {

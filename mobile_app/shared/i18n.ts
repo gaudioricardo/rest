@@ -7,7 +7,7 @@ export const translations = {
   // Navigation
   dashboard: { en: 'Dashboard', pt: 'Painel' },
   invoices: { en: 'Invoices', pt: 'Facturas' },
-  quotes: { en: 'Quotes', pt: 'Orçamentos' },
+  quotes: { en: 'Quotes', pt: 'Cotações' },
   receipts: { en: 'Receipts', pt: 'Recibos' },
   clients: { en: 'Clients', pt: 'Clientes' },
   stock: { en: 'Stock', pt: 'Stock' },
@@ -55,8 +55,8 @@ export const translations = {
   overdue: { en: 'Overdue', pt: 'Vencido' },
 
   // Quote
-  quote: { en: 'Quote', pt: 'Orçamento' },
-  newQuote: { en: 'New Quote', pt: 'Novo Orçamento' },
+  quote: { en: 'Quote', pt: 'Cotação' },
+  newQuote: { en: 'New Quote', pt: 'Nova Cotação' },
   validityDays: { en: 'Validity (days)', pt: 'Validade (dias)' },
   approved: { en: 'Approved', pt: 'Aprovado' },
   rejected: { en: 'Rejected', pt: 'Rejeitado' },

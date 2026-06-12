@@ -21,8 +21,10 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="invoice/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="invoice/[id]" options={{ presentation: 'card' }} />
+      <Stack.Screen name="invoice/edit" options={{ presentation: 'modal' }} />
       <Stack.Screen name="quote/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="quote/[id]" options={{ presentation: 'card' }} />
+      <Stack.Screen name="quote/edit" options={{ presentation: 'modal' }} />
       <Stack.Screen name="receipt/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="receipt/[id]" options={{ presentation: 'card' }} />
       <Stack.Screen name="stock/new" options={{ presentation: 'modal' }} />

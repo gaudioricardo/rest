@@ -15,7 +15,7 @@ import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { DocumentItemRow } from '../../../components/forms/DocumentItemRow';
 import { useToast } from '../../../components/ui/ToastContainer';
-import { createInvoice } from '../../../lib/db';
+import { createInvoice, updateQuoteStatus } from '../../../lib/db';
 import type { DocumentItem } from '../../../shared/types';
 
 const TAX_RATE = 0.03;
@@ -24,7 +24,7 @@ export default function NewInvoiceScreen() {
   const router = useRouter();
   const { showToast } = useToast();
   const { userId } = useAuthStore();
-  const { loadInvoices, loadClients } = useDataStore();
+  const { loadInvoices, loadQuotes, loadClients, quotes, stockItems } = useDataStore();
   const { language, darkMode, company } = useSettingsStore();
 
   const palette = darkMode ? Colors.dark : Colors.light;
@@ -42,6 +42,24 @@ export default function NewInvoiceScreen() {
     { description: '', quantity: 1, unitPrice: 0 },
   ]);
   const [loading, setLoading] = useState(false);
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
+
+  const openQuotes = quotes.filter((q) => q.status === 'Approved' || q.status === 'Pending');
+
+  const handleSelectQuote = (quoteId: string) => {
+    const q = quotes.find((qt) => qt.id === quoteId);
+    if (!q) return;
+    setSelectedQuoteId(quoteId);
+    setClient(q.client);
+    setClientNuit(q.clientNuit ?? '');
+    setClientPhone(q.clientPhone ?? '');
+    setClientEmail(q.clientEmail ?? '');
+    setNotes(q.notes ?? '');
+    setUseSecondary(q.companyProfileId === 'secondary');
+    if (q.items && q.items.length > 0) {
+      setItems(q.items.map((i) => ({ description: i.description, quantity: i.quantity, unitPrice: i.unitPrice })));
+    }
+  };
 
   const subtotal = items.reduce((s, i) => {
     const v = i.quantity * i.unitPrice;
@@ -95,6 +113,10 @@ export default function NewInvoiceScreen() {
       );
       await loadInvoices(userId);
       await loadClients(userId);
+      if (selectedQuoteId) {
+        await updateQuoteStatus(selectedQuoteId, 'Liquidado');
+        await loadQuotes(userId);
+      }
       showToast(
         lang === 'pt' ? 'Factura criada' : 'Invoice created',
         undefined,
@@ -120,6 +142,57 @@ export default function NewInvoiceScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {/* Convert from Quote */}
+          {openQuotes.length > 0 && (
+            <View style={[styles.section, { borderColor: Colors.secondary + '60' }]}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="clipboard-outline" size={15} color={Colors.secondary} />
+                <Text style={[styles.sectionTitle, { color: palette.text, marginBottom: 0 }]}>
+                  {lang === 'pt' ? 'Converter Cotação' : 'Convert from Quote'}
+                </Text>
+              </View>
+              <Text style={[styles.sectionHint, { color: palette.textMuted }]}>
+                {lang === 'pt'
+                  ? 'Seleccione uma cotação para pré-preencher a factura'
+                  : 'Select a quote to pre-fill the invoice'}
+              </Text>
+              {openQuotes.slice(0, 5).map((q) => (
+                <TouchableOpacity
+                  key={q.id}
+                  onPress={() => handleSelectQuote(q.id)}
+                  activeOpacity={0.75}
+                  style={[
+                    styles.quoteOption,
+                    {
+                      borderColor: selectedQuoteId === q.id ? Colors.primary : palette.border,
+                      backgroundColor: selectedQuoteId === q.id ? Colors.primary + '10' : palette.surface,
+                    },
+                  ]}
+                >
+                  <View style={styles.quoteOptionLeft}>
+                    <Text style={[styles.quoteNum, { color: selectedQuoteId === q.id ? Colors.primary : palette.text }]}>
+                      {q.quoteNumber}
+                    </Text>
+                    <Text style={[styles.quoteClient, { color: palette.textSecondary }]} numberOfLines={1}>
+                      {q.client}
+                    </Text>
+                  </View>
+                  <View style={styles.quoteOptionRight}>
+                    <Text style={[styles.quoteAmount, { color: Colors.primary }]}>
+                      {formatCurrency(q.amount)}
+                    </Text>
+                    <Text style={[styles.quoteItems, { color: palette.textMuted }]}>
+                      {(q.items?.length ?? 0)} {lang === 'pt' ? 'item(s)' : 'item(s)'}
+                    </Text>
+                  </View>
+                  {selectedQuoteId === q.id && (
+                    <Ionicons name="checkmark-circle" size={18} color={Colors.primary} style={{ marginLeft: 6 }} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           {/* Company Profile */}
           {company?.secondaryCompany && (
             <View style={[styles.section, { borderColor: palette.border }]}>
@@ -171,6 +244,7 @@ export default function NewInvoiceScreen() {
                 index={i}
                 onChange={handleItemChange}
                 onRemove={removeItem}
+                stockItems={stockItems}
               />
             ))}
             <TouchableOpacity
@@ -229,7 +303,21 @@ const styles = StyleSheet.create({
   section: {
     borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md, gap: 4,
   },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   sectionTitle: { fontWeight: '700', fontSize: FontSize.sm, marginBottom: 8 },
+  sectionHint: { fontSize: FontSize.xs, marginBottom: 8 },
+  quoteOption: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderRadius: Radius.md,
+    paddingVertical: 10, paddingHorizontal: Spacing.sm,
+    marginBottom: 6,
+  },
+  quoteOptionLeft: { flex: 1, gap: 2 },
+  quoteOptionRight: { alignItems: 'flex-end', gap: 2 },
+  quoteNum: { fontWeight: '700', fontSize: FontSize.sm },
+  quoteClient: { fontSize: FontSize.xs },
+  quoteAmount: { fontWeight: '700', fontSize: FontSize.sm },
+  quoteItems: { fontSize: 10 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { fontSize: FontSize.sm, flex: 1 },
   addItemBtn: {

@@ -27,7 +27,7 @@ export default function NewReceiptScreen() {
   const router = useRouter();
   const { showToast } = useToast();
   const { userId } = useAuthStore();
-  const { loadReceipts, loadInvoices, invoices } = useDataStore();
+  const { loadReceipts, loadInvoices, loadStock, invoices } = useDataStore();
   const { language, darkMode } = useSettingsStore();
 
   const palette = darkMode ? Colors.dark : Colors.light;
@@ -74,6 +74,7 @@ export default function NewReceiptScreen() {
       });
       await loadReceipts(userId);
       await loadInvoices(userId);
+      if (selectedInvoice) await loadStock(userId);
       showToast(lang === 'pt' ? 'Recibo criado' : 'Receipt created', undefined, 'success');
       router.back();
     } catch (e) {
@@ -127,7 +128,7 @@ export default function NewReceiptScreen() {
             </Text>
             <Input label={tr(lang, 'clientName')} value={client} onChangeText={setClient} placeholder="Nome do cliente" />
             <Input label={lang === 'pt' ? 'Valor (MT)' : 'Amount (MT)'} value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="0.00" />
-            <Input label={tr(lang, 'invoiceRef')} value={invoiceRef} onChangeText={setInvoiceRef} placeholder="INV-0001 (opcional)" />
+            <Input label={tr(lang, 'invoiceRef')} value={invoiceRef} onChangeText={setInvoiceRef} placeholder="FAC-0001 (opcional)" />
             <Input label={tr(lang, 'paymentDate')} value={paymentDate} onChangeText={setPaymentDate} placeholder="YYYY-MM-DD" />
           </View>
 

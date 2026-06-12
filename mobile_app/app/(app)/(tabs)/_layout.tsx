@@ -1,75 +1,84 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import { withLayoutContext } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../../shared/theme';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { tr } from '../../../shared/i18n';
+import { FloatingTabBar } from '../../../components/ui/TabBar';
+
+const { Navigator } = createMaterialTopTabNavigator();
+const MaterialTabs = withLayoutContext(Navigator);
 
 export default function TabsLayout() {
-  const { darkMode, language } = useSettingsStore();
-  const palette = darkMode ? Colors.dark : Colors.light;
+  const { language } = useSettingsStore();
 
   return (
-    <Tabs
+    <MaterialTabs
+      id={undefined}
+      tabBarPosition="bottom"
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      style={{ backgroundColor: 'transparent',
+       }}
       screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: palette.textMuted,
-        tabBarStyle: {
-          backgroundColor: palette.card,
-          borderTopColor: palette.border,
-          borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-        },
+        swipeEnabled: true,
+        animationEnabled: true,
       }}
     >
-      <Tabs.Screen
+      <MaterialTabs.Screen
         name="index"
         options={{
           title: tr(language, 'dashboard'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="grid-outline" size={21} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTabs.Screen
         name="invoices"
         options={{
           title: tr(language, 'invoices'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="document-text-outline" size={21} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTabs.Screen
         name="quotes"
         options={{
           title: tr(language, 'quotes'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="clipboard-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="clipboard-outline" size={21} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTabs.Screen
         name="receipts"
         options={{
           title: tr(language, 'receipts'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="receipt-outline" size={21} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTabs.Screen
         name="clients"
         options={{
           title: tr(language, 'clients'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="people-outline" size={21} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTabs.Screen
         name="more"
         options={{
           title: tr(language, 'more'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="menu-outline" size={size} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="menu-outline" size={21} color={color} />
+          ),
         }}
       />
-    </Tabs>
+    </MaterialTabs>
   );
 }

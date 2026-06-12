@@ -355,7 +355,7 @@ export default function App() {
     const sampleInvoice: Invoice = {
       id: 'sample',
       seqNumber: 1,
-      invoiceNumber: 'INV-0001',
+      invoiceNumber: 'FAC-0001',
       client: 'Cliente Exemplo',
       initials: 'CE',
       issueDate: today,
@@ -503,6 +503,10 @@ export default function App() {
       triggerToast('Error', 'Erro', 'Failed to update invoice.', 'Falha ao actualizar factura.', 'error');
       return;
     }
+
+    await db.decrementStockForInvoice(currentUserId, invoiceId);
+    const updatedStock = await db.fetchStockItems(currentUserId);
+    setStockItems(updatedStock);
 
     const today = new Date().toISOString().slice(0, 10);
     const newReceipt = await db.createReceipt({
@@ -883,6 +887,9 @@ export default function App() {
         if (linkedInv) {
           const okPay = await db.updateInvoiceStatus(linkedInv.id, 'Paid');
           if (okPay) {
+            await db.decrementStockForInvoice(currentUserId, linkedInv.id);
+            const updatedStock = await db.fetchStockItems(currentUserId);
+            setStockItems(updatedStock);
             setInvoices(prev => prev.map(i =>
               i.id === linkedInv.id ? { ...i, status: 'Paid' as const, statusPt: 'Pago' as const } : i
             ));

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,39 @@ import { DeleteModal } from '../../../components/ui/DeleteModal';
 import { useToast } from '../../../components/ui/ToastContainer';
 import { updateDebtClientStatus, deleteDebtClient } from '../../../lib/db';
 import { getInitials, getAvatarColor } from '../../../shared/theme';
+
+function toWAPhone(phone: string) {
+  const clean = phone.replace(/[\s\-\(\)]/g, '');
+  if (clean.startsWith('+')) return clean.slice(1);
+  if (clean.startsWith('258')) return clean;
+  if (clean.startsWith('0')) return '258' + clean.slice(1);
+  return '258' + clean;
+}
+
+function ContactActions({ phone, palette }: { phone: string; palette: any }) {
+  return (
+    <View style={styles.contactActions}>
+      <TouchableOpacity
+        onPress={() => Linking.openURL(`tel:${phone}`)}
+        style={[styles.contactBtn, { backgroundColor: '#22c55e18' }]}
+      >
+        <Ionicons name="call" size={17} color="#22c55e" />
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => Linking.openURL(`whatsapp://send?phone=${toWAPhone(phone)}`)}
+        style={[styles.contactBtn, { backgroundColor: '#25D36618' }]}
+      >
+        <Ionicons name="logo-whatsapp" size={17} color="#25D366" />
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => Linking.openURL(`sms:${phone}`)}
+        style={[styles.contactBtn, { backgroundColor: Colors.primary + '18' }]}
+      >
+        <Ionicons name="chatbubble-ellipses-outline" size={17} color={Colors.primary} />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function ClientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,6 +69,8 @@ export default function ClientDetailScreen() {
   const clientInvoices = invoices.filter(
     (inv) => inv.client.toLowerCase() === client.fullName.toLowerCase()
   );
+
+  const primaryPhone = client.movitelNumber || client.vodacomNumber || '';
 
   const handleSettle = async () => {
     if (!userId) return;
@@ -73,6 +108,7 @@ export default function ClientDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* Profile card */}
         <View style={[styles.profileCard, { backgroundColor: palette.card }]}>
           <View style={[styles.avatar, { backgroundColor: getAvatarColor(client.fullName) }]}>
             <Text style={styles.initials}>{getInitials(client.fullName)}</Text>
@@ -84,28 +120,78 @@ export default function ClientDetailScreen() {
               {lang === 'pt' ? 'Desde' : 'Since'}: {formatDate(client.createdAt, lang)}
             </Text>
           )}
+
+          {/* Quick-action buttons below avatar */}
+          {!!primaryPhone && (
+            <View style={styles.quickActions}>
+              <TouchableOpacity
+                onPress={() => Linking.openURL(`tel:${primaryPhone}`)}
+                style={[styles.quickBtn, { backgroundColor: '#22c55e18' }]}
+              >
+                <Ionicons name="call" size={22} color="#22c55e" />
+                <Text style={[styles.quickLabel, { color: '#22c55e' }]}>
+                  {lang === 'pt' ? 'Ligar' : 'Call'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => Linking.openURL(`whatsapp://send?phone=${toWAPhone(primaryPhone)}`)}
+                style={[styles.quickBtn, { backgroundColor: '#25D36618' }]}
+              >
+                <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
+                <Text style={[styles.quickLabel, { color: '#25D366' }]}>WhatsApp</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => Linking.openURL(`sms:${primaryPhone}`)}
+                style={[styles.quickBtn, { backgroundColor: Colors.primary + '18' }]}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.primary} />
+                <Text style={[styles.quickLabel, { color: Colors.primary }]}>SMS</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
+        {/* Contacts card */}
         <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
           <Text style={[styles.cardTitle, { color: palette.textMuted }]}>CONTACTOS</Text>
+
           {client.movitelNumber ? (
-            <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={16} color={palette.textMuted} />
-              <Text style={[styles.infoText, { color: palette.text }]}>Movitel: {client.movitelNumber}</Text>
+            <View style={styles.contactRow}>
+              <View style={styles.infoRow}>
+                <Ionicons name="call-outline" size={16} color={palette.textMuted} />
+                <Text style={[styles.infoText, { color: palette.text }]}>
+                  Movitel: {client.movitelNumber}
+                </Text>
+              </View>
+              <ContactActions phone={client.movitelNumber} palette={palette} />
             </View>
           ) : null}
+
           {client.vodacomNumber ? (
-            <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={16} color={palette.textMuted} />
-              <Text style={[styles.infoText, { color: palette.text }]}>Vodacom: {client.vodacomNumber}</Text>
+            <View style={styles.contactRow}>
+              <View style={styles.infoRow}>
+                <Ionicons name="call-outline" size={16} color={palette.textMuted} />
+                <Text style={[styles.infoText, { color: palette.text }]}>
+                  Vodacom: {client.vodacomNumber}
+                </Text>
+              </View>
+              <ContactActions phone={client.vodacomNumber} palette={palette} />
             </View>
           ) : null}
+
           {client.email ? (
-            <View style={styles.infoRow}>
+            <TouchableOpacity
+              onPress={() => Linking.openURL(`mailto:${client.email}`)}
+              style={styles.infoRow}
+            >
               <Ionicons name="mail-outline" size={16} color={palette.textMuted} />
               <Text style={[styles.infoText, { color: palette.text }]}>{client.email}</Text>
-            </View>
+              <Ionicons name="open-outline" size={13} color={palette.textMuted} />
+            </TouchableOpacity>
           ) : null}
+
           {client.address ? (
             <View style={styles.infoRow}>
               <Ionicons name="location-outline" size={16} color={palette.textMuted} />
@@ -114,6 +200,7 @@ export default function ClientDetailScreen() {
           ) : null}
         </View>
 
+        {/* Invoices */}
         {clientInvoices.length > 0 && (
           <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
             <Text style={[styles.cardTitle, { color: palette.textMuted }]}>FACTURAS</Text>
@@ -123,9 +210,12 @@ export default function ClientDetailScreen() {
                 onPress={() => router.push(`/(app)/invoice/${inv.id}`)}
                 style={[styles.invRow, { borderBottomColor: palette.border }]}
               >
-                <Text style={[{ fontWeight: '600', color: palette.text, fontSize: FontSize.sm }]}>{inv.invoiceNumber}</Text>
-                <Text style={[{ color: palette.textMuted, fontSize: 12 }]}>{formatDate(inv.issueDate, lang)}</Text>
-                <Badge label={lang === 'pt' ? inv.statusPt : inv.status} variant={inv.status === 'Paid' ? 'success' : inv.status === 'Overdue' ? 'error' : 'warning'} />
+                <Text style={{ fontWeight: '600', color: palette.text, fontSize: FontSize.sm }}>{inv.invoiceNumber}</Text>
+                <Text style={{ color: palette.textMuted, fontSize: 12 }}>{formatDate(inv.issueDate, lang)}</Text>
+                <Badge
+                  label={lang === 'pt' ? inv.statusPt : inv.status}
+                  variant={inv.status === 'Paid' ? 'success' : inv.status === 'Overdue' ? 'error' : 'warning'}
+                />
               </TouchableOpacity>
             ))}
           </View>
@@ -161,9 +251,28 @@ const styles = StyleSheet.create({
   initials: { color: '#fff', fontWeight: '700', fontSize: 28 },
   name: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: FontSize.xl, fontWeight: '700', textAlign: 'center' },
   joined: { fontSize: 12 },
-  card: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: 8 },
+  // Quick-action row inside profile card
+  quickActions: {
+    flexDirection: 'row', gap: 10, marginTop: 8,
+  },
+  quickBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, borderRadius: Radius.lg, gap: 4,
+  },
+  quickLabel: { fontSize: 11, fontWeight: '700' },
+  // Contacts card
+  card: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.md, gap: 10 },
   cardTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
+  contactRow: { gap: 6 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   infoText: { fontSize: FontSize.sm, flex: 1 },
-  invRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 0.5, gap: 8 },
+  contactActions: { flexDirection: 'row', gap: 8, paddingLeft: 24 },
+  contactBtn: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  invRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 8, borderBottomWidth: 0.5, gap: 8,
+  },
 });

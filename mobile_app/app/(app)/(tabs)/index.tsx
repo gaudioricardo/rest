@@ -1,9 +1,10 @@
 import React from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDataStore } from '../../../stores/dataStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -21,9 +22,15 @@ export default function DashboardScreen() {
   const { showToast } = useToast();
   const { language, darkMode, company } = useSettingsStore();
   const { userId } = useAuthStore();
-  const { invoices, quotes, stockItems, expenses, loadAll } = useDataStore();
+  const { invoices, quotes, receipts, stockItems, expenses, loadAll, loading } = useDataStore();
   const [refreshing, setRefreshing] = React.useState(false);
   const [generatingReport, setGeneratingReport] = React.useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (userId) loadAll(userId);
+    }, [userId])
+  );
 
   const palette = darkMode ? Colors.dark : Colors.light;
   const lang = language;
@@ -63,7 +70,7 @@ export default function DashboardScreen() {
     if (!company) return;
     setGeneratingReport(true);
     try {
-      const uri = await generateReportPdf(company, invoices, quotes, [], expenses);
+      const uri = await generateReportPdf(company, invoices, quotes, receipts, expenses);
       await sharePdf(uri);
     } catch {
       showToast('Erro', 'Erro ao gerar relatório', 'error');
@@ -88,9 +95,18 @@ export default function DashboardScreen() {
         <Text style={[styles.brandMark, { color: Colors.primary }]}>Rest</Text>
       </View>
 
+      {loading && !refreshing && (
+        <View style={styles.loadingBar}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+          <Text style={[styles.loadingText, { color: palette.textMuted }]}>
+            {lang === 'pt' ? 'A carregar dados...' : 'Loading data...'}
+          </Text>
+        </View>
+      )}
+
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
         {/* KPIs */}
         <View style={styles.kpiGrid}>
@@ -242,6 +258,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     letterSpacing: 1,
   },
+  loadingBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 8,
+  },
+  loadingText: { fontSize: FontSize.xs },
   scroll: { padding: Spacing.md, gap: Spacing.sm },
   kpiGrid: { flexDirection: 'row', gap: Spacing.sm },
   sectionTitle: {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +26,9 @@ export default function QuoteDetailScreen() {
   const [loading, setLoading] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfTaxType, setPdfTaxType] = useState<'ispc' | 'iva' | 'none'>('ispc');
+  const [pdfStamp, setPdfStamp] = useState(true);
 
   const palette = darkMode ? Colors.dark : Colors.light;
   const lang = language;
@@ -62,11 +65,11 @@ export default function QuoteDetailScreen() {
     finally { setLoading(false); }
   };
 
-  const handleExportPdf = async () => {
+  const handleExportPdf = async (taxType: 'ispc' | 'iva' | 'none' = 'ispc', includeStamp = true) => {
     if (!company) return;
     setLoading(true);
     try {
-      const uri = await generateQuotePdf(quote, company, items);
+      const uri = await generateQuotePdf(quote, company, items, { taxType, includeStamp });
       await sharePdf(uri);
     } catch (e) { showToast('Erro PDF', String(e), 'error'); }
     finally { setLoading(false); }
@@ -91,9 +94,14 @@ export default function QuoteDetailScreen() {
           <Ionicons name="arrow-back" size={22} color={palette.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: palette.text }]}>{quote.quoteNumber}</Text>
-        <TouchableOpacity onPress={() => setShowDelete(true)}>
-          <Ionicons name="trash-outline" size={20} color={Colors.error} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => router.push(`/(app)/quote/edit?id=${quote.id}` as any)} style={styles.headerBtn}>
+            <Ionicons name="create-outline" size={20} color={Colors.secondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowDelete(true)} style={styles.headerBtn}>
+            <Ionicons name="trash-outline" size={20} color={Colors.error} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -154,13 +162,68 @@ export default function QuoteDetailScreen() {
               <Button title={lang === 'pt' ? 'Rejeitar' : 'Reject'} onPress={handleReject} variant="danger" style={{ flex: 1 }} />
             </>
           )}
-          <Button title={tr(lang, 'exportPdf')} onPress={handleExportPdf} variant="outline" loading={loading} style={{ flex: 1 }}
+          <Button title={tr(lang, 'exportPdf')} onPress={() => setShowPdfModal(true)} variant="outline" loading={loading} style={{ flex: 1 }}
             icon={<Ionicons name="share-outline" size={18} color={Colors.primary} />}
           />
         </View>
       </ScrollView>
 
       <DeleteModal visible={showDelete} onConfirm={handleDelete} onCancel={() => setShowDelete(false)} loading={deleting} />
+
+      {/* PDF Options Modal */}
+      <Modal visible={showPdfModal} transparent animationType="slide">
+        <TouchableOpacity style={pdfStyles.overlay} activeOpacity={1} onPress={() => setShowPdfModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={[pdfStyles.sheet, { backgroundColor: palette.card }]}>
+            <View style={[pdfStyles.handle, { backgroundColor: palette.border }]} />
+            <Text style={[pdfStyles.sheetTitle, { color: palette.text }]}>
+              {lang === 'pt' ? 'Opções do PDF' : 'PDF Options'}
+            </Text>
+
+            <Text style={[pdfStyles.sectionLabel, { color: palette.textMuted }]}>
+              {lang === 'pt' ? 'TIPO DE IMPOSTO' : 'TAX TYPE'}
+            </Text>
+            {([
+              { value: 'ispc', label: 'ISPC 3%', sub: lang === 'pt' ? 'Regime simplificado' : 'Simplified regime' },
+              { value: 'iva',  label: 'IVA 16%', sub: lang === 'pt' ? 'Regime geral' : 'General regime' },
+              { value: 'none', label: lang === 'pt' ? 'Isento / Incluído' : 'Exempt / Included', sub: lang === 'pt' ? 'Sem imposto adicional' : 'No additional tax' },
+            ] as const).map(opt => (
+              <TouchableOpacity key={opt.value} onPress={() => setPdfTaxType(opt.value)}
+                style={[pdfStyles.option, {
+                  borderColor: pdfTaxType === opt.value ? Colors.secondary : palette.border,
+                  backgroundColor: pdfTaxType === opt.value ? Colors.secondary + '12' : palette.surface,
+                }]}>
+                <View style={[pdfStyles.radio, { borderColor: pdfTaxType === opt.value ? Colors.secondary : palette.border }]}>
+                  {pdfTaxType === opt.value && <View style={[pdfStyles.radioDot, { backgroundColor: Colors.secondary }]} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: palette.text, fontWeight: pdfTaxType === opt.value ? '700' : '500', fontSize: FontSize.sm }}>{opt.label}</Text>
+                  <Text style={{ color: palette.textMuted, fontSize: FontSize.xs }}>{opt.sub}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            <View style={[pdfStyles.stampRow, { borderTopColor: palette.border }]}>
+              <View>
+                <Text style={{ color: palette.text, fontWeight: '600', fontSize: FontSize.sm }}>
+                  {lang === 'pt' ? 'Incluir Carimbo' : 'Include Stamp'}
+                </Text>
+                <Text style={{ color: palette.textMuted, fontSize: FontSize.xs }}>
+                  {lang === 'pt' ? 'Sobrepõe o carimbo da empresa' : 'Overlay company stamp'}
+                </Text>
+              </View>
+              <Switch value={pdfStamp} onValueChange={setPdfStamp} trackColor={{ true: Colors.secondary, false: palette.border }} thumbColor="#fff" />
+            </View>
+
+            <Button
+              title={lang === 'pt' ? 'Gerar e Partilhar PDF' : 'Generate & Share PDF'}
+              onPress={async () => { setShowPdfModal(false); await handleExportPdf(pdfTaxType, pdfStamp); }}
+              loading={loading}
+              icon={<Ionicons name="document-text-outline" size={18} color="#fff" />}
+              style={{ marginTop: 8 }}
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -172,6 +235,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, borderBottomWidth: 1,
   },
   title: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: FontSize.lg, fontWeight: '700' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerBtn: { padding: 4 },
   scroll: { padding: Spacing.md, gap: Spacing.md, paddingBottom: 40 },
   heroCard: { borderRadius: Radius.xl, padding: Spacing.lg, alignItems: 'center', gap: 6 },
   heroAmount: { color: '#fff', fontSize: 32, fontWeight: '800', fontFamily: 'PlayfairDisplay_700Bold' },
@@ -183,4 +248,22 @@ const styles = StyleSheet.create({
   detail: { fontSize: FontSize.sm },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 0.5 },
   actions: { flexDirection: 'row', gap: Spacing.md, flexWrap: 'wrap' },
+});
+
+const pdfStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.lg, paddingBottom: 32, gap: 8 },
+  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
+  sheetTitle: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: FontSize.lg, fontWeight: '700', marginBottom: 4 },
+  sectionLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginTop: 4 },
+  option: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: Spacing.md, borderRadius: Radius.lg, borderWidth: 1.5,
+  },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  stampRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderTopWidth: 1, paddingTop: 12, marginTop: 4,
+  },
 });

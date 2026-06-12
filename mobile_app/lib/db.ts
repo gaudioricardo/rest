@@ -32,37 +32,35 @@ export const getCompanySettings = async (userId: string): Promise<CompanySetting
   return {
     id: data.id,
     userId: data.user_id,
-    companyName: data.companyName ?? '',
+    companyName: data.company_name ?? '',
     nuit: data.nuit ?? '',
     address: data.address ?? '',
     city: data.city ?? '',
     phone: data.phone ?? '',
     email: data.email ?? '',
-    logoBase64: data.logoBase64 ?? undefined,
-    stampBase64: data.stampBase64 ?? undefined,
-    bankAccounts: data.bankAccounts ?? [],
-    mobileContacts: data.mobileContacts ?? [],
+    logoBase64: data.logo_base64 ?? undefined,
+    stampBase64: data.stamp_base64 ?? undefined,
+    bankAccounts: data.bank_accounts ?? [],
+    mobileContacts: data.mobile_contacts ?? [],
     setupComplete: data.setup_complete ?? false,
-    secondaryCompany: data.secondaryCompany ?? null,
+    secondaryCompany: data.secondary_company ?? null,
   };
 };
 
 export const saveCompanySettings = async (userId: string, settings: Partial<CompanySettings>) => {
-  const payload = {
-    user_id: userId,
-    companyName: settings.companyName,
-    nuit: settings.nuit,
-    address: settings.address,
-    city: settings.city,
-    phone: settings.phone,
-    email: settings.email,
-    logoBase64: settings.logoBase64,
-    stampBase64: settings.stampBase64,
-    bankAccounts: settings.bankAccounts,
-    mobileContacts: settings.mobileContacts,
-    setup_complete: settings.setupComplete,
-    secondaryCompany: settings.secondaryCompany,
-  };
+  const payload: Record<string, unknown> = { user_id: userId };
+  if (settings.companyName !== undefined) payload.company_name = settings.companyName;
+  if (settings.nuit !== undefined) payload.nuit = settings.nuit;
+  if (settings.address !== undefined) payload.address = settings.address;
+  if (settings.city !== undefined) payload.city = settings.city;
+  if (settings.phone !== undefined) payload.phone = settings.phone;
+  if (settings.email !== undefined) payload.email = settings.email;
+  if (settings.logoBase64 !== undefined) payload.logo_base64 = settings.logoBase64;
+  if (settings.stampBase64 !== undefined) payload.stamp_base64 = settings.stampBase64;
+  if (settings.bankAccounts !== undefined) payload.bank_accounts = settings.bankAccounts;
+  if (settings.mobileContacts !== undefined) payload.mobile_contacts = settings.mobileContacts;
+  if (settings.setupComplete !== undefined) payload.setup_complete = settings.setupComplete;
+  if ('secondaryCompany' in settings) payload.secondary_company = settings.secondaryCompany ?? null;
   return supabase.from('company_settings').upsert(payload, { onConflict: 'user_id' });
 };
 
@@ -71,7 +69,7 @@ export const saveCompanySettings = async (userId: string, settings: Partial<Comp
 const mapInvoice = (row: any): Invoice => ({
   id: row.id,
   seqNumber: row.seq_number,
-  invoiceNumber: `INV-${fmt(row.seq_number)}`,
+  invoiceNumber: `FAC-${fmt(row.seq_number)}`,
   client: row.client ?? '',
   clientNuit: row.client_nuit,
   clientPhone: row.client_phone,
@@ -150,6 +148,37 @@ export const updateInvoiceStatus = async (id: string, status: Invoice['status'])
   return supabase.from('invoices').update({ status }).eq('id', id);
 };
 
+export const updateInvoice = async (
+  id: string,
+  inv: Pick<Invoice, 'client' | 'clientNuit' | 'clientPhone' | 'clientEmail' | 'issueDate' | 'dueDate' | 'amount' | 'notes' | 'companyProfileId'>,
+  items: DocumentItem[]
+) => {
+  const { error } = await supabase.from('invoices').update({
+    client: inv.client,
+    client_nuit: inv.clientNuit ?? null,
+    client_phone: inv.clientPhone ?? null,
+    client_email: inv.clientEmail ?? null,
+    issue_date: inv.issueDate,
+    due_date: inv.dueDate ?? null,
+    amount: inv.amount,
+    company_profile_id: inv.companyProfileId ?? 'primary',
+    notes: inv.notes ?? null,
+  }).eq('id', id);
+  if (error) throw error;
+  await supabase.from('invoice_items').delete().eq('invoice_id', id);
+  if (items.length > 0) {
+    await supabase.from('invoice_items').insert(
+      items.map((item, i) => ({
+        invoice_id: id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        sort_order: i,
+      }))
+    );
+  }
+};
+
 export const deleteInvoice = async (id: string) => {
   return supabase.from('invoices').delete().eq('id', id);
 };
@@ -159,7 +188,7 @@ export const deleteInvoice = async (id: string) => {
 const mapQuote = (row: any): Quote => ({
   id: row.id,
   seqNumber: row.seq_number,
-  quoteNumber: `QT-${fmt(row.seq_number)}`,
+  quoteNumber: `COT-${fmt(row.seq_number)}`,
   client: row.client ?? '',
   clientNuit: row.client_nuit,
   clientPhone: row.client_phone,
@@ -241,6 +270,37 @@ export const updateQuoteStatus = async (id: string, status: Quote['status']) => 
   return supabase.from('quotes').update({ status }).eq('id', id);
 };
 
+export const updateQuote = async (
+  id: string,
+  qt: Pick<Quote, 'client' | 'clientNuit' | 'clientPhone' | 'clientEmail' | 'issueDate' | 'validityDays' | 'amount' | 'notes' | 'companyProfileId'>,
+  items: DocumentItem[]
+) => {
+  const { error } = await supabase.from('quotes').update({
+    client: qt.client,
+    client_nuit: qt.clientNuit ?? null,
+    client_phone: qt.clientPhone ?? null,
+    client_email: qt.clientEmail ?? null,
+    issue_date: qt.issueDate,
+    validity_days: qt.validityDays,
+    amount: qt.amount,
+    company_profile_id: qt.companyProfileId ?? 'primary',
+    notes: qt.notes ?? null,
+  }).eq('id', id);
+  if (error) throw error;
+  await supabase.from('quote_items').delete().eq('quote_id', id);
+  if (items.length > 0) {
+    await supabase.from('quote_items').insert(
+      items.map((item, i) => ({
+        quote_id: id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        sort_order: i,
+      }))
+    );
+  }
+};
+
 export const deleteQuote = async (id: string) => {
   return supabase.from('quotes').delete().eq('id', id);
 };
@@ -298,6 +358,7 @@ export const createReceipt = async (
 
   if (rec.invoiceId) {
     await updateInvoiceStatus(rec.invoiceId, 'Paid');
+    await decrementStockForInvoice(userId, rec.invoiceId);
     // cascade: settle client
     await supabase
       .from('debt_clients')
@@ -310,6 +371,29 @@ export const createReceipt = async (
 
 export const deleteReceipt = async (id: string) => {
   return supabase.from('receipts').delete().eq('id', id);
+};
+
+export const decrementStockForInvoice = async (userId: string, invoiceId: string): Promise<void> => {
+  const { data: items } = await supabase
+    .from('invoice_items')
+    .select('description, quantity')
+    .eq('invoice_id', invoiceId);
+  if (!items || items.length === 0) return;
+  for (const item of items) {
+    if (!item.description || !(item.quantity > 0)) continue;
+    const { data: stock } = await supabase
+      .from('stock_items')
+      .select('id, stock_level')
+      .eq('user_id', userId)
+      .ilike('name', item.description)
+      .maybeSingle();
+    if (stock) {
+      await supabase
+        .from('stock_items')
+        .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - item.quantity) })
+        .eq('id', stock.id);
+    }
+  }
 };
 
 // ─── STOCK ───────────────────────────────────────────────────────────────────

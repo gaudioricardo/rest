@@ -34,17 +34,21 @@ export const useDataStore = create<DataState>((set) => ({
 
   loadAll: async (userId) => {
     set({ loading: true });
-    const [invoices, quotes, receipts, stockItems, expenses, contacts, debtClients] =
-      await Promise.all([
-        db.getInvoices(userId),
-        db.getQuotes(userId),
-        db.getReceipts(userId),
-        db.getStockItems(userId),
-        db.getExpenses(userId),
-        db.getContacts(userId),
-        db.getDebtClients(userId),
-      ]);
-    set({ invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, loading: false });
+    try {
+      const [invoices, quotes, receipts, stockItems, expenses, contacts, debtClients] =
+        await Promise.all([
+          db.getInvoices(userId),
+          db.getQuotes(userId),
+          db.getReceipts(userId),
+          db.getStockItems(userId),
+          db.getExpenses(userId),
+          db.getContacts(userId),
+          db.getDebtClients(userId),
+        ]);
+      set({ invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, loading: false });
+    } catch {
+      set({ loading: false });
+    }
   },
 
   loadInvoices: async (userId) => {
