@@ -229,9 +229,9 @@ export default function SettingsScreen() {
               </View>
             ))}
             <TouchableOpacity onPress={() => setBankAccounts(p => [...p, { bank: '', iban: '' }])}
-              style={[S.addBtn, { borderColor: Colors.primary }]}>
-              <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
-              <Text style={{ color: Colors.primary, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Banco' : 'Add Bank'}</Text>
+              style={[S.addBtn, { borderColor: palette.accent }]}>
+              <Ionicons name="add-circle-outline" size={18} color={palette.accent} />
+              <Text style={{ color: palette.accent, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Banco' : 'Add Bank'}</Text>
             </TouchableOpacity>
           </>
         );
@@ -266,9 +266,9 @@ export default function SettingsScreen() {
               </View>
             ))}
             <TouchableOpacity onPress={() => setMobileContacts(p => [...p, { provider: 'M-Pesa', number: '' }])}
-              style={[S.addBtn, { borderColor: Colors.secondary }]}>
-              <Ionicons name="add-circle-outline" size={18} color={Colors.secondary} />
-              <Text style={{ color: Colors.secondary, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Pagamento' : 'Add Payment'}</Text>
+              style={[S.addBtn, { borderColor: palette.secondaryAccent }]}>
+              <Ionicons name="add-circle-outline" size={18} color={palette.secondaryAccent} />
+              <Text style={{ color: palette.secondaryAccent, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Pagamento' : 'Add Payment'}</Text>
             </TouchableOpacity>
           </>
         );
@@ -476,7 +476,7 @@ export default function SettingsScreen() {
             </TouchableOpacity>
             <Text style={[styles.title, { color: palette.text }]}>{stepTitles[step]}</Text>
             <TouchableOpacity onPress={step < 4 ? () => setStep(s => s + 1) : handleSaveWizard}>
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.base }}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.base }}>
                 {step < 4 ? (lang === 'pt' ? 'Próximo' : 'Next') : (lang === 'pt' ? 'Guardar' : 'Save')}
               </Text>
             </TouchableOpacity>
@@ -561,9 +561,9 @@ export default function SettingsScreen() {
                 </View>
               ))}
               <TouchableOpacity onPress={() => setSecBanks(p => [...p, { bank: '', iban: '' }])}
-                style={[S.addBtn, { borderColor: Colors.primary }]}>
-                <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
-                <Text style={{ color: Colors.primary, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Banco' : 'Add Bank'}</Text>
+                style={[S.addBtn, { borderColor: palette.accent }]}>
+                <Ionicons name="add-circle-outline" size={18} color={palette.accent} />
+                <Text style={{ color: palette.accent, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Banco' : 'Add Bank'}</Text>
               </TouchableOpacity>
 
               <Text style={[styles.secHeader, { color: palette.textMuted }]}>{lang === 'pt' ? 'CARTEIRAS MÓVEIS' : 'MOBILE WALLETS'}</Text>
@@ -595,9 +595,9 @@ export default function SettingsScreen() {
                 </View>
               ))}
               <TouchableOpacity onPress={() => setSecMobile(p => [...p, { provider: 'M-Pesa', number: '' }])}
-                style={[S.addBtn, { borderColor: Colors.secondary }]}>
-                <Ionicons name="add-circle-outline" size={18} color={Colors.secondary} />
-                <Text style={{ color: Colors.secondary, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Pagamento' : 'Add Payment'}</Text>
+                style={[S.addBtn, { borderColor: palette.secondaryAccent }]}>
+                <Ionicons name="add-circle-outline" size={18} color={palette.secondaryAccent} />
+                <Text style={{ color: palette.secondaryAccent, fontWeight: '600' }}>{lang === 'pt' ? 'Adicionar Pagamento' : 'Add Payment'}</Text>
               </TouchableOpacity>
 
               <Text style={[styles.secHeader, { color: palette.textMuted }]}>{lang === 'pt' ? 'ACTIVOS DE MARCA' : 'BRAND ASSETS'}</Text>

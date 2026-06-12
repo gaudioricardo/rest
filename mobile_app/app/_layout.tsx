@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, Image, StyleSheet, Animated } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -41,7 +41,7 @@ function Preloader({ onDone }: { onDone: () => void }) {
 
   return (
     <View style={styles.preloader}>
-      <Text style={styles.logo}>Rest</Text>
+      <Image source={require('../assets/Logo.png')} style={styles.logoImg} resizeMode="contain" />
       <Text style={styles.tagline}>Where growth finds space</Text>
       <View style={styles.dotsRow}>
         {dots.map(({ anim }, i) => (
@@ -125,11 +125,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  logo: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 48,
-    color: '#0c1c48',
-    letterSpacing: 2,
+  logoImg: {
+    width: 220,
+    height: 80,
   },
   tagline: {
     fontFamily: 'PlayfairDisplay_400Regular_Italic',

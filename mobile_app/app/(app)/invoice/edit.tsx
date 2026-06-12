@@ -180,10 +180,10 @@ export default function EditInvoiceScreen() {
             ))}
             <TouchableOpacity
               onPress={() => setItems((p) => [...p, { description: '', quantity: 1, unitPrice: 0 }])}
-              style={[styles.addItemBtn, { borderColor: Colors.primary }]}
+              style={[styles.addItemBtn, { borderColor: palette.accent }]}
             >
-              <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
-              <Text style={{ color: Colors.primary, fontWeight: '600', fontSize: 13 }}>
+              <Ionicons name="add-circle-outline" size={18} color={palette.accent} />
+              <Text style={{ color: palette.accent, fontWeight: '600', fontSize: 13 }}>
                 {tr(lang, 'addItem')}
               </Text>
             </TouchableOpacity>
@@ -198,9 +198,9 @@ export default function EditInvoiceScreen() {
               <Text style={{ color: palette.textSecondary }}>{tr(lang, 'tax')}</Text>
               <Text style={{ color: palette.text, fontWeight: '600' }}>{formatCurrency(tax)}</Text>
             </View>
-            <View style={[styles.totalRow, styles.totalFinal]}>
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
+            <View style={[styles.totalRow, styles.totalFinal, { borderTopColor: palette.accent }]}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
             </View>
           </View>
 
@@ -239,5 +239,5 @@ const styles = StyleSheet.create({
   },
   totalsBox: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.md, gap: 8 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  totalFinal: { borderTopWidth: 2, borderTopColor: Colors.primary, paddingTop: 10, marginTop: 4 },
+  totalFinal: { borderTopWidth: 2, paddingTop: 10, marginTop: 4 },
 });

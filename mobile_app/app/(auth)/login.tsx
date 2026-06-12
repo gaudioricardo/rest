@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, Image, StyleSheet, ScrollView, TouchableOpacity,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -67,8 +67,8 @@ export default function LoginScreen() {
 
           {/* Logo */}
           <View style={styles.logoBlock}>
-            <Text style={[styles.logoText, { color: Colors.primary }]}>Rest</Text>
-            <Text style={[styles.tagline, { color: Colors.secondary }]}>
+            <Image source={require('../../assets/Logo.png')} style={styles.logoImg} resizeMode="contain" />
+            <Text style={[styles.tagline, { color: palette.taglineColor }]}>
               {lang === 'pt' ? 'Onde o crescimento encontra espaço' : 'Where growth finds space'}
             </Text>
           </View>
@@ -89,7 +89,7 @@ export default function LoginScreen() {
                     isLogin === key && { backgroundColor: palette.card, ...shadowSm },
                   ]}
                 >
-                  <Text style={[styles.tabText, { color: isLogin === key ? Colors.primary : palette.textMuted }]}>
+                  <Text style={[styles.tabText, { color: isLogin === key ? palette.accent : palette.textMuted }]}>
                     {label}
                   </Text>
                 </TouchableOpacity>
@@ -147,7 +147,7 @@ export default function LoginScreen() {
               >
                 <Text style={{ color: palette.textMuted, fontSize: 13 }}>
                   {isLogin ? tr(lang, 'noAccount') : tr(lang, 'hasAccount')}
-                  <Text style={{ color: Colors.primary, fontWeight: '600' }}>
+                  <Text style={{ color: palette.accent, fontWeight: '600' }}>
                     {' '}{isLogin ? tr(lang, 'signup') : tr(lang, 'login')}
                   </Text>
                 </Text>
@@ -183,15 +183,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.xl,
   },
-  logoText: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 42,
-    letterSpacing: 2,
+  logoImg: {
+    width: 180,
+    height: 65,
   },
   tagline: {
     fontFamily: 'PlayfairDisplay_400Regular_Italic',
     fontSize: 14,
-    marginTop: 4,
+    marginTop: 8,
   },
   card: {
     borderRadius: Radius.xl,

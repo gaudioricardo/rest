@@ -140,9 +140,9 @@ export default function QuoteDetailScreen() {
                 <Text style={{ color: palette.textSecondary }}>ISPC 3%</Text>
                 <Text style={{ color: palette.text, fontWeight: '600' }}>{formatCurrency(tax)}</Text>
               </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 2, borderTopColor: Colors.secondary, paddingTop: 8 }}>
-                <Text style={{ color: Colors.secondary, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
-                <Text style={{ color: Colors.secondary, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(quote.amount)}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 2, borderTopColor: palette.secondaryAccent, paddingTop: 8 }}>
+                <Text style={{ color: palette.secondaryAccent, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
+                <Text style={{ color: palette.secondaryAccent, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(quote.amount)}</Text>
               </View>
             </View>
           </View>

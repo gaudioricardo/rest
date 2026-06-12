@@ -109,7 +109,7 @@ export default function InvoiceDetailScreen() {
         <Text style={[styles.title, { color: palette.text }]}>{invoice.invoiceNumber}</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => router.push(`/(app)/invoice/edit?id=${invoice.id}` as any)} style={styles.headerBtn}>
-            <Ionicons name="create-outline" size={20} color={Colors.primary} />
+            <Ionicons name="create-outline" size={20} color={palette.accent} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowDelete(true)} style={styles.headerBtn}>
             <Ionicons name="trash-outline" size={20} color={Colors.error} />
@@ -177,9 +177,9 @@ export default function InvoiceDetailScreen() {
                 <Text style={{ color: palette.textSecondary }}>ISPC 3%</Text>
                 <Text style={{ color: palette.text, fontWeight: '600' }}>{formatCurrency(tax)}</Text>
               </View>
-              <View style={[styles.totalRow, { borderTopWidth: 2, borderTopColor: Colors.primary, marginTop: 6, paddingTop: 8 }]}>
-                <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
-                <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
+              <View style={[styles.totalRow, { borderTopWidth: 2, borderTopColor: palette.accent, marginTop: 6, paddingTop: 8 }]}>
+                <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
+                <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
               </View>
             </View>
           </View>
@@ -212,7 +212,7 @@ export default function InvoiceDetailScreen() {
             variant="outline"
             loading={loading}
             style={{ flex: 1 }}
-            icon={<Ionicons name="share-outline" size={18} color={Colors.primary} />}
+            icon={<Ionicons name="share-outline" size={18} color={palette.accent} />}
           />
         </View>
       </ScrollView>

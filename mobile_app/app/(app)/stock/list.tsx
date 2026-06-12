@@ -90,7 +90,7 @@ export default function StockListScreen() {
                   {item.stockLevel}/{item.maxStock}
                 </Text>
               </View>
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.sm, marginTop: 4 }}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.sm, marginTop: 4 }}>
                 {formatCurrency(item.price)}
               </Text>
             </View>

@@ -87,7 +87,7 @@ export default function StockDetailScreen() {
           <Text style={[styles.cat, { color: palette.textSecondary }]}>
             {lang === 'pt' ? item.categoryPt : item.category} · {lang === 'pt' ? item.warehousePt : item.warehouse}
           </Text>
-          <Text style={[styles.price, { color: Colors.primary }]}>{formatCurrency(item.price)}</Text>
+          <Text style={[styles.price, { color: palette.accent }]}>{formatCurrency(item.price)}</Text>
 
           <View style={[styles.progressBg, { backgroundColor: palette.surface }]}>
             <View style={[styles.progressFill, {

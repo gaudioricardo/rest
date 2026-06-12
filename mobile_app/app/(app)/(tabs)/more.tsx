@@ -76,7 +76,7 @@ export default function MoreScreen() {
             icon="cube-outline"
             label={tr(lang, 'stock')}
             onPress={() => router.push('/(app)/stock/list' as any)}
-            color={Colors.primary}
+            color={palette.accent}
           />
           <MenuItem
             icon="wallet-outline"
@@ -98,8 +98,8 @@ export default function MoreScreen() {
         </Text>
         <View style={[styles.group, { backgroundColor: palette.card }]}>
           <View style={[styles.menuItem, { borderBottomColor: palette.border }]}>
-            <View style={[styles.iconBox, { backgroundColor: Colors.primary + '18' }]}>
-              <Ionicons name="moon-outline" size={20} color={Colors.primary} />
+            <View style={[styles.iconBox, { backgroundColor: palette.accent + '22' }]}>
+              <Ionicons name="moon-outline" size={20} color={palette.accent} />
             </View>
             <Text style={[styles.menuLabel, { color: palette.text, flex: 1 }]}>
               {tr(lang, 'darkMode')}
@@ -107,7 +107,7 @@ export default function MoreScreen() {
             <Switch
               value={darkMode}
               onValueChange={setDarkMode}
-              trackColor={{ true: Colors.primary, false: palette.border }}
+              trackColor={{ true: palette.accent, false: palette.border }}
             />
           </View>
           <View style={[styles.menuItem, { borderBottomColor: palette.border }]}>
@@ -121,7 +121,7 @@ export default function MoreScreen() {
               onPress={() => setLanguage(lang === 'pt' ? 'en' : 'pt')}
               style={[styles.langToggle, { borderColor: palette.border }]}
             >
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 13 }}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>
                 {lang === 'pt' ? 'PT' : 'EN'}
               </Text>
             </TouchableOpacity>

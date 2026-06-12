@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator,
+  View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -83,16 +83,17 @@ export default function DashboardScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
       <View style={[styles.topBar, { backgroundColor: palette.card, borderBottomColor: palette.border }]}>
         <View>
-          <Text style={[styles.screenTitle, { color: palette.text }]}>
-            {lang === 'pt' ? 'Painel' : 'Dashboard'}
-          </Text>
+          <Image
+            source={darkMode ? require('../../../assets/dark.png') : require('../../../assets/Logo_extended.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
           <Text style={[styles.date, { color: palette.textMuted }]}>
             {today.toLocaleDateString(lang === 'pt' ? 'pt-MZ' : 'en-US', {
               weekday: 'long', day: 'numeric', month: 'long',
             })}
           </Text>
         </View>
-        <Text style={[styles.brandMark, { color: Colors.primary }]}>Rest</Text>
       </View>
 
       {loading && !refreshing && (
@@ -247,17 +248,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
   },
-  screenTitle: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: FontSize.xl,
-    fontWeight: '700',
+  headerLogo: {
+    width: 180,
+    height: 40,
   },
-  date: { fontSize: FontSize.xs, marginTop: 2 },
-  brandMark: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 20,
-    letterSpacing: 1,
-  },
+  date: { fontSize: FontSize.xs, marginTop: 4 },
   loadingBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 8,

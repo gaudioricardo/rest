@@ -170,7 +170,7 @@ export default function NewInvoiceScreen() {
                   ]}
                 >
                   <View style={styles.quoteOptionLeft}>
-                    <Text style={[styles.quoteNum, { color: selectedQuoteId === q.id ? Colors.primary : palette.text }]}>
+                    <Text style={[styles.quoteNum, { color: selectedQuoteId === q.id ? palette.accent : palette.text }]}>
                       {q.quoteNumber}
                     </Text>
                     <Text style={[styles.quoteClient, { color: palette.textSecondary }]} numberOfLines={1}>
@@ -178,7 +178,7 @@ export default function NewInvoiceScreen() {
                     </Text>
                   </View>
                   <View style={styles.quoteOptionRight}>
-                    <Text style={[styles.quoteAmount, { color: Colors.primary }]}>
+                    <Text style={[styles.quoteAmount, { color: palette.accent }]}>
                       {formatCurrency(q.amount)}
                     </Text>
                     <Text style={[styles.quoteItems, { color: palette.textMuted }]}>
@@ -186,7 +186,7 @@ export default function NewInvoiceScreen() {
                     </Text>
                   </View>
                   {selectedQuoteId === q.id && (
-                    <Ionicons name="checkmark-circle" size={18} color={Colors.primary} style={{ marginLeft: 6 }} />
+                    <Ionicons name="checkmark-circle" size={18} color={palette.accent} style={{ marginLeft: 6 }} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -249,10 +249,10 @@ export default function NewInvoiceScreen() {
             ))}
             <TouchableOpacity
               onPress={addItem}
-              style={[styles.addItemBtn, { borderColor: Colors.primary }]}
+              style={[styles.addItemBtn, { borderColor: palette.accent }]}
             >
-              <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
-              <Text style={{ color: Colors.primary, fontWeight: '600', fontSize: 13 }}>
+              <Ionicons name="add-circle-outline" size={18} color={palette.accent} />
+              <Text style={{ color: palette.accent, fontWeight: '600', fontSize: 13 }}>
                 {tr(lang, 'addItem')}
               </Text>
             </TouchableOpacity>
@@ -268,9 +268,9 @@ export default function NewInvoiceScreen() {
               <Text style={{ color: palette.textSecondary }}>{tr(lang, 'tax')}</Text>
               <Text style={{ color: palette.text, fontWeight: '600' }}>{formatCurrency(tax)}</Text>
             </View>
-            <View style={[styles.totalRow, styles.totalFinal]}>
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
+            <View style={[styles.totalRow, styles.totalFinal, { borderTopColor: palette.accent }]}>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
+              <Text style={{ color: palette.accent, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
             </View>
           </View>
 
@@ -329,6 +329,6 @@ const styles = StyleSheet.create({
   },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalFinal: {
-    borderTopWidth: 2, borderTopColor: Colors.primary, paddingTop: 10, marginTop: 4,
+    borderTopWidth: 2, paddingTop: 10, marginTop: 4,
   },
 });

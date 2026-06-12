@@ -116,7 +116,7 @@ export default function NewReceiptScreen() {
                 >
                   <Text style={{ color: palette.text, fontWeight: '600', fontSize: 13 }}>{inv.invoiceNumber}</Text>
                   <Text style={{ color: palette.textSecondary, fontSize: 12 }}>{inv.client}</Text>
-                  <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 13 }}>{formatCurrency(inv.amount)}</Text>
+                  <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 13 }}>{formatCurrency(inv.amount)}</Text>
                 </TouchableOpacity>
               ))}
             </View>

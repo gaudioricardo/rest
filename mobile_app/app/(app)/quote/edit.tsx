@@ -170,10 +170,10 @@ export default function EditQuoteScreen() {
             ))}
             <TouchableOpacity
               onPress={() => setItems((p) => [...p, { description: '', quantity: 1, unitPrice: 0 }])}
-              style={[styles.addItemBtn, { borderColor: Colors.secondary }]}
+              style={[styles.addItemBtn, { borderColor: palette.secondaryAccent }]}
             >
-              <Ionicons name="add-circle-outline" size={18} color={Colors.secondary} />
-              <Text style={{ color: Colors.secondary, fontWeight: '600', fontSize: 13 }}>{tr(lang, 'addItem')}</Text>
+              <Ionicons name="add-circle-outline" size={18} color={palette.secondaryAccent} />
+              <Text style={{ color: palette.secondaryAccent, fontWeight: '600', fontSize: 13 }}>{tr(lang, 'addItem')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -186,9 +186,9 @@ export default function EditQuoteScreen() {
               <Text style={{ color: palette.textSecondary }}>ISPC 3%</Text>
               <Text style={{ color: palette.text, fontWeight: '600' }}>{formatCurrency(tax)}</Text>
             </View>
-            <View style={[styles.totalRow, { borderTopWidth: 2, borderTopColor: Colors.secondary, marginTop: 4, paddingTop: 8 }]}>
-              <Text style={{ color: Colors.secondary, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
-              <Text style={{ color: Colors.secondary, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
+            <View style={[styles.totalRow, { borderTopWidth: 2, borderTopColor: palette.secondaryAccent, marginTop: 4, paddingTop: 8 }]}>
+              <Text style={{ color: palette.secondaryAccent, fontWeight: '700', fontSize: FontSize.md }}>TOTAL</Text>
+              <Text style={{ color: palette.secondaryAccent, fontWeight: '700', fontSize: FontSize.md }}>{formatCurrency(total)}</Text>
             </View>
           </View>
 

@@ -58,7 +58,7 @@ function TabItem({
     marginLeft: interpolate(progress.value, [0, 1], [0, 5]),
   }));
 
-  const iconColor = isFocused ? Colors.primary : palette.textMuted;
+  const iconColor = isFocused ? palette.accent : palette.textMuted;
 
   return (
     <Animated.View style={[styles.itemWrap, containerAnim]}>
@@ -73,7 +73,7 @@ function TabItem({
           style={[
             styles.pill,
             pillAnim,
-            { backgroundColor: Colors.primary + '18' },
+            { backgroundColor: palette.accent + '22' },
           ]}
         />
 
@@ -85,7 +85,7 @@ function TabItem({
             style={[
               styles.label,
               labelAnim,
-              { color: Colors.primary },
+              { color: palette.accent },
             ]}
           >
             {label}

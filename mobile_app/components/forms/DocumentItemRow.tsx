@@ -75,11 +75,11 @@ export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemo
               <Ionicons name="storefront-outline" size={11} color={Colors.secondary} />
               <Text numberOfLines={1} style={styles.suggestionText}>
                 <Text style={{ color: palette.textMuted }}>{item.description}</Text>
-                <Text style={{ color: Colors.secondary, fontWeight: '700' }}>
+                <Text style={{ color: palette.secondaryAccent, fontWeight: '700' }}>
                   {suggestion.name.slice(item.description.length)}
                 </Text>
               </Text>
-              <Text style={[styles.suggestionPrice, { color: Colors.secondary }]}>
+              <Text style={[styles.suggestionPrice, { color: palette.secondaryAccent }]}>
                 {formatCurrency(suggestion.price)}
               </Text>
             </TouchableOpacity>
@@ -114,7 +114,7 @@ export const DocumentItemRow: React.FC<Props> = ({ item, index, onChange, onRemo
         </View>
         <View style={styles.field}>
           <Text style={[styles.label, { color: palette.textMuted }]}>Total</Text>
-          <Text style={[styles.total, { color: Colors.primary }]}>{formatCurrency(total)}</Text>
+          <Text style={[styles.total, { color: palette.accent }]}>{formatCurrency(total)}</Text>
         </View>
       </View>
     </View>

@@ -144,10 +144,10 @@ export default function ClientDetailScreen() {
 
               <TouchableOpacity
                 onPress={() => Linking.openURL(`sms:${primaryPhone}`)}
-                style={[styles.quickBtn, { backgroundColor: Colors.primary + '18' }]}
+                style={[styles.quickBtn, { backgroundColor: palette.accent + '22' }]}
               >
-                <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.primary} />
-                <Text style={[styles.quickLabel, { color: Colors.primary }]}>SMS</Text>
+                <Ionicons name="chatbubble-ellipses-outline" size={22} color={palette.accent} />
+                <Text style={[styles.quickLabel, { color: palette.accent }]}>SMS</Text>
               </TouchableOpacity>
             </View>
           )}
