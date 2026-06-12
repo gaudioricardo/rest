@@ -9,6 +9,7 @@ import { Colors, Spacing, FontSize, Radius } from '../../../shared/theme';
 import { tr, formatCurrency, formatDate } from '../../../shared/i18n';
 import { DocumentListItem } from '../../../components/ui/DocumentListItem';
 import { getInvoiceVariant } from '../../../components/ui/Badge';
+import { TAB_BAR_BOTTOM_INSET } from '../../../components/ui/TabBar';
 
 export default function InvoicesScreen() {
   const router = useRouter();
@@ -136,6 +137,6 @@ const styles = StyleSheet.create({
   pill: {
     paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.full,
   },
-  list: { padding: Spacing.md },
+  list: { padding: Spacing.md, paddingBottom: TAB_BAR_BOTTOM_INSET },
   empty: { textAlign: 'center', marginTop: 48, fontSize: FontSize.sm },
 });

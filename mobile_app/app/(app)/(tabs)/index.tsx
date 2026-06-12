@@ -16,6 +16,7 @@ import { Card } from '../../../components/ui/Card';
 import { Badge, getInvoiceVariant } from '../../../components/ui/Badge';
 import { generateReportPdf, sharePdf } from '../../../lib/pdf';
 import { useToast } from '../../../components/ui/ToastContainer';
+import { TAB_BAR_BOTTOM_INSET } from '../../../components/ui/TabBar';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -82,18 +83,11 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
       <View style={[styles.topBar, { backgroundColor: palette.card, borderBottomColor: palette.border }]}>
-        <View>
-          <Image
-            source={darkMode ? require('../../../assets/dark.png') : require('../../../assets/Logo_extended.png')}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
-          <Text style={[styles.date, { color: palette.textMuted }]}>
-            {today.toLocaleDateString(lang === 'pt' ? 'pt-MZ' : 'en-US', {
-              weekday: 'long', day: 'numeric', month: 'long',
-            })}
-          </Text>
-        </View>
+        <Image
+          source={darkMode ? require('../../../assets/dark.png') : require('../../../assets/Logo_extended.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
       </View>
 
       {loading && !refreshing && (
@@ -245,20 +239,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
   },
   headerLogo: {
-    width: 180,
-    height: 40,
+    width: 100,
+    height: 36,
   },
-  date: { fontSize: FontSize.xs, marginTop: 4 },
   loadingBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, paddingVertical: 8,
   },
   loadingText: { fontSize: FontSize.xs },
-  scroll: { padding: Spacing.md, gap: Spacing.sm },
+  scroll: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: TAB_BAR_BOTTOM_INSET },
   kpiGrid: { flexDirection: 'row', gap: Spacing.sm },
   sectionTitle: {
     fontFamily: 'PlayfairDisplay_700Bold',

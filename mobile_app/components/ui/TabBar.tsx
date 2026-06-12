@@ -14,6 +14,9 @@ const BAR_HEIGHT = 62;        // total height of the bar pill
 const BAR_RADIUS = 32;        // outer bar corner radius
 const BAR_H_MARGIN = 14;      // gap between bar and screen edges
 const BAR_BOTTOM_GAP = 10;    // gap between bar bottom and safe-area inset
+
+// Clearance screens must add as paddingBottom so content clears the floating bar
+export const TAB_BAR_BOTTOM_INSET = BAR_HEIGHT + BAR_BOTTOM_GAP * 2;
 const PILL_RADIUS = 22;       // active tab inner pill corner radius
 const PILL_V_INSET = 8;       // vertical padding inside active pill
 const PILL_H_INSET = 8;       // horizontal padding inside active pill
@@ -106,11 +109,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: MaterialTopTa
     <View
       style={[
         styles.wrapper,
-        {
-          backgroundColor: 'transparent',
-          paddingBottom: Math.max(insets.bottom, 0) + BAR_BOTTOM_GAP,
-        },
+        { paddingBottom: Math.max(insets.bottom, 0) + BAR_BOTTOM_GAP },
       ]}
+      pointerEvents="box-none"
     >
       <View
         style={[
@@ -161,8 +162,13 @@ export function FloatingTabBar({ state, descriptors, navigation }: MaterialTopTa
 
 const styles = StyleSheet.create({
   wrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: BAR_H_MARGIN,
     paddingTop: BAR_BOTTOM_GAP,
+    backgroundColor: 'transparent',
   },
   bar: {
     flexDirection: 'row',

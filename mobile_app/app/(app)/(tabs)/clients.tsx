@@ -9,6 +9,7 @@ import { Colors, Spacing, FontSize, Radius } from '../../../shared/theme';
 import { tr } from '../../../shared/i18n';
 import { Badge } from '../../../components/ui/Badge';
 import { getAvatarColor, getInitials } from '../../../shared/theme';
+import { TAB_BAR_BOTTOM_INSET } from '../../../components/ui/TabBar';
 
 // Normalise phone for WhatsApp (adds Mozambique +258 if needed)
 function toWAPhone(phone: string) {
@@ -182,7 +183,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: FontSize.sm },
   filters: { flexDirection: 'row', gap: 8, padding: Spacing.md, borderBottomWidth: 1 },
   pill: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.full },
-  list: { padding: Spacing.md, paddingBottom: 120 },
+  list: { padding: Spacing.md, paddingBottom: TAB_BAR_BOTTOM_INSET },
   empty: { textAlign: 'center', marginTop: 48, fontSize: FontSize.sm },
   clientCard: {
     borderRadius: Radius.lg, borderWidth: 1, marginBottom: Spacing.sm, overflow: 'hidden',

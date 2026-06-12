@@ -7,6 +7,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { Colors, Spacing, FontSize, Radius } from '../../../shared/theme';
 import { tr } from '../../../shared/i18n';
+import { TAB_BAR_BOTTOM_INSET } from '../../../components/ui/TabBar';
 
 interface MenuItemProps {
   icon: string;
@@ -53,7 +54,7 @@ export default function MoreScreen() {
         <Text style={[styles.title, { color: palette.text }]}>{tr(lang, 'more')}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_BOTTOM_INSET }}>
         {/* User Info */}
         <View style={[styles.userCard, { backgroundColor: palette.card }]}>
           <View style={[styles.userAvatar, { backgroundColor: Colors.primary }]}>

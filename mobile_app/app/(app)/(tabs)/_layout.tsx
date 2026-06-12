@@ -18,8 +18,8 @@ export default function TabsLayout() {
       id={undefined}
       tabBarPosition="bottom"
       tabBar={(props) => <FloatingTabBar {...props} />}
-      style={{ backgroundColor: 'transparent',
-       }}
+      style={{ backgroundColor: 'transparent' }}
+      sceneContainerStyle={{ backgroundColor: 'transparent' }}
       screenOptions={{
         swipeEnabled: true,
         animationEnabled: true,

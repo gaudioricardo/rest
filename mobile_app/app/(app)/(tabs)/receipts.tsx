@@ -9,6 +9,7 @@ import { Colors, Spacing, FontSize, Radius } from '../../../shared/theme';
 import { tr, formatCurrency, formatDate } from '../../../shared/i18n';
 import { DocumentListItem } from '../../../components/ui/DocumentListItem';
 import { getInitials, getAvatarColor } from '../../../shared/theme';
+import { TAB_BAR_BOTTOM_INSET } from '../../../components/ui/TabBar';
 
 export default function ReceiptsScreen() {
   const router = useRouter();
@@ -89,6 +90,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, paddingVertical: 10, borderBottomWidth: 1,
   },
   searchInput: { flex: 1, fontSize: FontSize.sm },
-  list: { padding: Spacing.md },
+  list: { padding: Spacing.md, paddingBottom: TAB_BAR_BOTTOM_INSET },
   empty: { textAlign: 'center', marginTop: 48, fontSize: FontSize.sm },
 });
