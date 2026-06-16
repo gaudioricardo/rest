@@ -611,3 +611,152 @@ export const sharePdf = async (uri: string) => {
     await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
   }
 };
+
+// ─── RELATÓRIO FILTRADO (com período) ─────────────────────────────────────────
+
+export const generateFilteredReportPdf = async (
+  settings: CompanySettings,
+  invoices: Invoice[],
+  quotes: Quote[],
+  receipts: Receipt[],
+  expenses: Expense[],
+  periodLabel: string
+): Promise<string> => {
+  const now = new Date();
+
+  const totalInvoiced = invoices.reduce((s, i) => s + i.amount, 0);
+  const totalPaid     = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
+  const totalPending  = invoices.filter(i => i.status === 'Pending').reduce((s, i) => s + i.amount, 0);
+  const totalOverdue  = invoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0);
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalReceipts = receipts.reduce((s, r) => s + r.amount, 0);
+  const totalQuotes   = quotes.reduce((s, q) => s + q.amount, 0);
+  const netResult     = totalPaid - totalExpenses;
+
+  const sc = (s: string) =>
+    s === 'Paid' || s === 'Pago' || s === 'Aprovado' ? '#16a34a'
+    : s === 'Overdue' || s === 'Vencido' || s === 'Rejeitado' ? '#dc2626'
+    : s === 'Liquidado' ? '#7c3aed' : '#d97706';
+
+  const invRows = invoices.map(inv => `
+    <tr><td>${inv.invoiceNumber}</td><td>${inv.client}</td><td>${inv.date}</td>
+    <td>${inv.dueDate || '—'}</td>
+    <td style="text-align:right;font-weight:bold;">${fmtMT(inv.amount)}</td>
+    <td style="color:${sc(inv.status)};font-weight:bold;">${inv.statusPt}</td></tr>`).join('');
+
+  const qtRows = quotes.map(q => `
+    <tr><td>${q.quoteNumber}</td><td>${q.client}</td><td>${q.date}</td>
+    <td>${q.validityDays} dias</td>
+    <td style="text-align:right;font-weight:bold;">${fmtMT(q.amount)}</td>
+    <td style="color:${sc(q.status)};font-weight:bold;">${q.statusPt}</td></tr>`).join('');
+
+  const recRows = receipts.map(r => `
+    <tr><td>${r.receiptNumber}</td><td>${r.client}</td><td>${r.date}</td>
+    <td>${r.invoiceRef || '—'}</td><td>${r.methodPt || r.method}</td>
+    <td style="text-align:right;font-weight:bold;">${fmtMT(r.amount)}</td></tr>`).join('');
+
+  const expRows = expenses.map(e => `
+    <tr><td>${e.ref}</td><td>${e.merchant}</td><td>${e.categoryPt}</td><td>${e.date}</td>
+    <td style="text-align:right;font-weight:bold;">${fmtMT(e.amount)}</td>
+    <td style="color:${sc(e.status)};font-weight:bold;">${e.statusPt}</td></tr>`).join('');
+
+  const logoHtml = settings.logoBase64
+    ? `<img src="${settings.logoBase64}" style="width:54px;height:54px;object-fit:contain;border-radius:8px;border:1px solid #e0dfdd;background:#fff;padding:3px;" />`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #1b1b1f; background: #fff; }
+  .report-header { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+  .report-header-text { flex: 1; }
+  h2 { font-size: 17px; color: #0c1c48; margin-bottom: 2px; }
+  .sub { font-size: 10px; color: #555; margin-bottom: 2px; }
+  .period { font-size: 11px; font-weight: bold; color: #0c1c48; }
+  .kpis { display: flex; gap: 7px; margin-bottom: 16px; flex-wrap: wrap; }
+  .kpi { flex: 1; min-width: 100px; padding: 8px; border-radius: 6px; text-align: center; }
+  .kpi-label { font-size: 8px; color: #555; margin-bottom: 3px; }
+  .kpi-value { font-size: 11px; font-weight: bold; }
+  .sec { font-size: 10px; font-weight: bold; color: #0c1c48; margin: 10px 0 4px; text-transform: uppercase; border-bottom: 1px solid #0c1c48; padding-bottom: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 8.5px; }
+  th { background: #0c1c48; color: #fff; padding: 4px 6px; text-align: left; }
+  td { padding: 3px 6px; border-bottom: 1px solid #eee; }
+  tr:nth-child(even) td { background: #f8f8fc; }
+  .empty { text-align: center; padding: 6px; color: #777; font-style: italic; }
+  .summary { margin-top: 14px; background: #0c1c48; color: #fff; padding: 10px 14px; border-radius: 8px; display: flex; gap: 20px; }
+  .sum-item { text-align: center; flex: 1; }
+  .sum-label { font-size: 8px; opacity: 0.7; margin-bottom: 3px; }
+  .sum-value { font-size: 12px; font-weight: bold; }
+  .footer { margin-top: 10px; font-size: 7px; color: #aaa; text-align: center; border-top: 1px solid #eee; padding-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="report-header">
+    ${logoHtml}
+    <div class="report-header-text">
+      <h2>RELATÓRIO FINANCEIRO</h2>
+      <div class="sub">${settings.companyName || ''} — NUIT: ${settings.nuit || '—'}</div>
+      <div class="period">Período: ${periodLabel}</div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi" style="background:#e0f2fe;"><div class="kpi-label">Total Facturado</div><div class="kpi-value" style="color:#0c1c48;">${fmtMT(totalInvoiced)}</div></div>
+    <div class="kpi" style="background:#dcfce7;"><div class="kpi-label">Total Recebido</div><div class="kpi-value" style="color:#16a34a;">${fmtMT(totalPaid)}</div></div>
+    <div class="kpi" style="background:#fef9c3;"><div class="kpi-label">Pendente</div><div class="kpi-value" style="color:#d97706;">${fmtMT(totalPending)}</div></div>
+    <div class="kpi" style="background:#fee2e2;"><div class="kpi-label">Vencido</div><div class="kpi-value" style="color:#dc2626;">${fmtMT(totalOverdue)}</div></div>
+    <div class="kpi" style="background:#fce7f3;"><div class="kpi-label">Total Cotações</div><div class="kpi-value" style="color:#805522;">${fmtMT(totalQuotes)}</div></div>
+    <div class="kpi" style="background:#f3e8ff;"><div class="kpi-label">Total Despesas</div><div class="kpi-value" style="color:#7c3aed;">${fmtMT(totalExpenses)}</div></div>
+  </div>
+
+  <div class="sec">Facturas Emitidas (${invoices.length})</div>
+  <table>
+    <thead><tr><th>Nº Factura</th><th>Cliente</th><th>Data Emissão</th><th>Vencimento</th><th style="text-align:right;">Valor</th><th>Estado</th></tr></thead>
+    <tbody>
+      ${invRows || `<tr><td colspan="6" class="empty">Sem registos neste período</td></tr>`}
+      ${invoices.length > 0 ? `<tr style="background:#e8ebf5;"><td colspan="4" style="font-weight:bold;text-align:right;">Total:</td><td style="font-weight:bold;text-align:right;">${fmtMT(totalInvoiced)}</td><td></td></tr>` : ''}
+    </tbody>
+  </table>
+
+  <div class="sec">Cotações Emitidas (${quotes.length})</div>
+  <table>
+    <thead><tr><th>Nº Cotação</th><th>Cliente</th><th>Data Emissão</th><th>Validade</th><th style="text-align:right;">Valor</th><th>Estado</th></tr></thead>
+    <tbody>
+      ${qtRows || `<tr><td colspan="6" class="empty">Sem registos neste período</td></tr>`}
+      ${quotes.length > 0 ? `<tr style="background:#f5eed8;"><td colspan="4" style="font-weight:bold;text-align:right;">Total:</td><td style="font-weight:bold;text-align:right;">${fmtMT(totalQuotes)}</td><td></td></tr>` : ''}
+    </tbody>
+  </table>
+
+  <div class="sec">Recibos Emitidos (${receipts.length})</div>
+  <table>
+    <thead><tr><th>Nº Recibo</th><th>Cliente</th><th>Data Pagamento</th><th>Ref. Factura</th><th>Método</th><th style="text-align:right;">Valor</th></tr></thead>
+    <tbody>
+      ${recRows || `<tr><td colspan="6" class="empty">Sem registos neste período</td></tr>`}
+      ${receipts.length > 0 ? `<tr style="background:#dcfce7;"><td colspan="5" style="font-weight:bold;text-align:right;">Total:</td><td style="font-weight:bold;text-align:right;">${fmtMT(totalReceipts)}</td></tr>` : ''}
+    </tbody>
+  </table>
+
+  <div class="sec">Despesas Registadas (${expenses.length})</div>
+  <table>
+    <thead><tr><th>Ref.</th><th>Comerciante</th><th>Categoria</th><th>Data</th><th style="text-align:right;">Valor</th><th>Estado</th></tr></thead>
+    <tbody>
+      ${expRows || `<tr><td colspan="6" class="empty">Sem registos neste período</td></tr>`}
+      ${expenses.length > 0 ? `<tr style="background:#fce7f3;"><td colspan="4" style="font-weight:bold;text-align:right;">Total:</td><td style="font-weight:bold;text-align:right;">${fmtMT(totalExpenses)}</td><td></td></tr>` : ''}
+    </tbody>
+  </table>
+
+  <div class="summary">
+    <div class="sum-item"><div class="sum-label">FACTURADO</div><div class="sum-value">${fmtMT(totalInvoiced)}</div></div>
+    <div class="sum-item"><div class="sum-label">RECEBIDO</div><div class="sum-value" style="color:#86efac;">${fmtMT(totalPaid)}</div></div>
+    <div class="sum-item"><div class="sum-label">DESPESAS</div><div class="sum-value" style="color:#fca5a5;">${fmtMT(totalExpenses)}</div></div>
+    <div class="sum-item"><div class="sum-label">RESULTADO LÍQUIDO</div><div class="sum-value" style="color:${netResult >= 0 ? '#86efac' : '#fca5a5'};">${fmtMT(netResult)}</div></div>
+  </div>
+
+  <div class="footer">Processado por Computador • ERP Código AT/MZ • ${settings.companyName} — NUIT: ${settings.nuit} • Gerado em: ${now.toLocaleString()}</div>
+</body></html>`;
+
+  const { uri } = await Print.printToFileAsync({ html, base64: false });
+  return uri;
+};

@@ -15,6 +15,7 @@ export const translations = {
   contacts: { en: 'Contacts', pt: 'Contactos' },
   settings: { en: 'Settings', pt: 'Configurações' },
   more: { en: 'More', pt: 'Mais' },
+  reports: { en: 'Reports', pt: 'Relatórios' },
 
   // Common
   save: { en: 'Save', pt: 'Guardar' },

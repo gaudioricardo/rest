@@ -88,6 +88,9 @@ export default function DashboardScreen() {
           style={styles.headerLogo}
           resizeMode="contain"
         />
+        <TouchableOpacity onPress={() => router.push('/(app)/settings')} hitSlop={8}>
+          <Ionicons name="settings-outline" size={22} color={palette.textMuted} />
+        </TouchableOpacity>
       </View>
 
       {loading && !refreshing && (

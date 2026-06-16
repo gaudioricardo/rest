@@ -644,6 +644,22 @@ export async function generateReceiptPDF(
   await renderToPDF(html, 842, 595, `${receipt.receiptNumber}.pdf`, 'landscape', 'a5');
 }
 
+// ─── FILTERED FINANCIAL REPORT PDF ───────────────────────────────────────────
+
+export function generateFilteredReportPDF(
+  invoices: Invoice[],
+  quotes: Quote[],
+  receipts: Receipt[],
+  expenses: Expense[],
+  settings: CompanySettings,
+  periodLabel: string
+): Promise<void> {
+  return new Promise(resolve => {
+    generateFinancialReportPDF(invoices, quotes, receipts, expenses, settings, periodLabel);
+    resolve();
+  });
+}
+
 // ─── FINANCIAL REPORT PDF (jsPDF directo, landscape A4) ──────────────────────
 
 export function generateFinancialReportPDF(
@@ -651,91 +667,128 @@ export function generateFinancialReportPDF(
   quotes: Quote[],
   receipts: Receipt[],
   expenses: Expense[],
-  settings: CompanySettings
+  settings: CompanySettings,
+  periodLabel?: string
 ) {
   const doc = new jsPDF('landscape');
   const pageW = doc.internal.pageSize.getWidth();
   const now = new Date();
 
+  const totalInvoicedKpi = invoices.reduce((s, i) => s + i.amount, 0);
+  const totalPaidKpi     = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
+  const totalPendingKpi  = invoices.filter(i => i.status !== 'Paid').reduce((s, i) => s + i.amount, 0);
+  const totalExpensesKpi = expenses.reduce((s, e) => s + e.amount, 0);
+  const netResultKpi     = totalPaidKpi - totalExpensesKpi;
+  const totalReceiptsKpi = receipts.reduce((s, r) => s + r.amount, 0);
+
+  // Logo (top-left, if available)
+  if (settings.logoBase64) {
+    try {
+      const fmt = settings.logoBase64.startsWith('data:image/jpeg') || settings.logoBase64.startsWith('data:image/jpg') ? 'JPEG' : 'PNG';
+      doc.addImage(settings.logoBase64, fmt, 14, 6, 24, 24);
+    } catch { /* skip on unsupported format */ }
+  }
+
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('RELATÓRIO FINANCEIRO', pageW / 2, 20, { align: 'center' });
-  doc.setFontSize(10);
+  doc.setTextColor(12, 28, 72);
+  doc.text('RELATÓRIO FINANCEIRO', pageW / 2, 18, { align: 'center' });
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
   doc.text(
-    `${settings.companyName || '[Empresa]'} — ${now.toLocaleDateString('pt-MZ', { year: 'numeric', month: 'long', day: 'numeric' })}`,
-    pageW / 2, 28, { align: 'center' }
+    `${settings.companyName || '[Empresa]'} — Período: ${periodLabel ?? now.toLocaleDateString('pt-MZ', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+    pageW / 2, 25, { align: 'center' }
   );
-  doc.setDrawColor(200, 200, 200);
-  doc.line(14, 33, pageW - 14, 33);
-
-  const totalInvoiced = invoices.reduce((s, i) => s + i.amount, 0);
-  const totalPaid     = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
-  const totalPending  = invoices.filter(i => i.status !== 'Paid').reduce((s, i) => s + i.amount, 0);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-
-  const summaryY = 40;
-  const colW = (pageW - 28) / 4;
   doc.setFontSize(8);
-  doc.setTextColor(30, 30, 30);
-  [
-    { label: 'Total Facturado', value: formatValue(totalInvoiced, 'MZN') },
-    { label: 'Total Recebido',  value: formatValue(totalPaid,     'MZN') },
-    { label: 'Total Pendente',  value: formatValue(totalPending,  'MZN') },
-    { label: 'Total Despesas',  value: formatValue(totalExpenses, 'MZN') },
-  ].forEach((stat, i) => {
-    const x = 14 + i * colW;
+  doc.text(`Gerado em: ${now.toLocaleString('pt-MZ')}`, pageW / 2, 30, { align: 'center' });
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, 34, pageW - 14, 34);
+
+  // KPI bar (6 indicators)
+  const kpiY = 38;
+  const kpiW = (pageW - 28) / 6;
+  const kpis = [
+    { label: 'Total Facturado',  value: formatValue(totalInvoicedKpi) },
+    { label: 'Total Recebido',   value: formatValue(totalPaidKpi) },
+    { label: 'Total Pendente',   value: formatValue(totalPendingKpi) },
+    { label: 'Total Recibos',    value: formatValue(totalReceiptsKpi) },
+    { label: 'Total Despesas',   value: formatValue(totalExpensesKpi) },
+    { label: 'Resultado Líquido',value: formatValue(netResultKpi) },
+  ];
+  kpis.forEach((k, i) => {
+    const x = 14 + i * kpiW;
     doc.setFillColor(248, 248, 252);
-    doc.roundedRect(x, summaryY, colW - 4, 16, 2, 2, 'F');
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
-    doc.text(stat.label, x + (colW - 4) / 2, summaryY + 5, { align: 'center' });
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 30, 30);
-    doc.text(stat.value, x + (colW - 4) / 2, summaryY + 12, { align: 'center' });
+    doc.roundedRect(x, kpiY, kpiW - 3, 16, 2, 2, 'F');
+    doc.setFontSize(6.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(110, 110, 110);
+    doc.text(k.label, x + (kpiW - 3) / 2, kpiY + 5.5, { align: 'center' });
+    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+    doc.text(k.value, x + (kpiW - 3) / 2, kpiY + 12, { align: 'center' });
     doc.setFont('helvetica', 'normal');
   });
+  let currentY = kpiY + 22;
 
-  let currentY = summaryY + 22;
-
+  // Invoices table
   doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
   doc.text('FACTURAS EMITIDAS', 14, currentY);
   autoTable(doc, {
     startY: currentY + 3,
-    head: [['Nº Factura', 'Cliente', 'Data', 'Vencimento', 'Valor (MT)', 'Estado']],
+    head: [['Nº Factura', 'Cliente', 'Data Emissão', 'Vencimento', 'Valor (MT)', 'Estado']],
     body: invoices.map(inv => [inv.invoiceNumber, inv.client, inv.date, inv.dueDate || '—', formatValue(inv.amount, 'MZN'), inv.statusPt]),
     styles: { fontSize: 7.5 },
     headStyles: { fillColor: [50, 60, 100], textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [248, 248, 252] },
     margin: { left: 14, right: 14 },
+    foot: [['', '', '', 'Total:', formatValue(invoices.reduce((s, i) => s + i.amount, 0), 'MZN'), '']],
+    footStyles: { fillColor: [230, 235, 250], textColor: [30, 30, 30], fontStyle: 'bold' },
   });
   currentY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
 
+  // Quotes table
   doc.setFontSize(9); doc.setFont('helvetica', 'bold');
   doc.text('COTAÇÕES EMITIDAS', 14, currentY);
   autoTable(doc, {
     startY: currentY + 3,
-    head: [['Nº Cotação', 'Cliente', 'Data', 'Validade (dias)', 'Valor (MT)', 'Estado']],
+    head: [['Nº Cotação', 'Cliente', 'Data Emissão', 'Validade (dias)', 'Valor (MT)', 'Estado']],
     body: quotes.map(q => [q.quoteNumber, q.client, q.date, String(q.validityDays), formatValue(q.amount, 'MZN'), q.statusPt]),
     styles: { fontSize: 7.5 },
     headStyles: { fillColor: [100, 70, 20], textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [252, 250, 245] },
     margin: { left: 14, right: 14 },
+    foot: [['', '', '', 'Total:', formatValue(quotes.reduce((s, q) => s + q.amount, 0), 'MZN'), '']],
+    footStyles: { fillColor: [250, 246, 235], textColor: [30, 30, 30], fontStyle: 'bold' },
   });
   currentY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
 
+  // Receipts table
   doc.setFontSize(9); doc.setFont('helvetica', 'bold');
   doc.text('RECIBOS EMITIDOS', 14, currentY);
   autoTable(doc, {
     startY: currentY + 3,
-    head: [['Nº Recibo', 'Cliente', 'Data', 'Ref. Factura', 'Método', 'Valor (MT)']],
+    head: [['Nº Recibo', 'Cliente', 'Data Pagamento', 'Ref. Factura', 'Método', 'Valor (MT)']],
     body: receipts.map(r => [r.receiptNumber, r.client, r.date, r.invoiceRef, r.methodPt, formatValue(r.amount, 'MZN')]),
     styles: { fontSize: 7.5 },
     headStyles: { fillColor: [20, 100, 60], textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [245, 252, 248] },
     margin: { left: 14, right: 14 },
+    foot: [['', '', '', '', 'Total:', formatValue(receipts.reduce((s, r) => s + r.amount, 0), 'MZN')]],
+    footStyles: { fillColor: [235, 250, 242], textColor: [30, 30, 30], fontStyle: 'bold' },
+  });
+  currentY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+
+  // Expenses table
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+  doc.text('DESPESAS REGISTADAS', 14, currentY);
+  autoTable(doc, {
+    startY: currentY + 3,
+    head: [['Ref.', 'Comerciante', 'Categoria', 'Data', 'Valor (MT)', 'Estado']],
+    body: expenses.map(e => [e.ref, e.merchant, e.categoryPt, e.date, formatValue(e.amount, 'MZN'), e.statusPt]),
+    styles: { fontSize: 7.5 },
+    headStyles: { fillColor: [140, 60, 20], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [252, 248, 245] },
+    margin: { left: 14, right: 14 },
+    foot: [['', '', '', 'Total:', formatValue(expenses.reduce((s, e) => s + e.amount, 0), 'MZN'), '']],
+    footStyles: { fillColor: [250, 240, 235], textColor: [30, 30, 30], fontStyle: 'bold' },
   });
 
   const finalY = doc.internal.pageSize.getHeight() - 10;

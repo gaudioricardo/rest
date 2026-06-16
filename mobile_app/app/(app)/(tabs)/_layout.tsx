@@ -71,6 +71,15 @@ export default function TabsLayout() {
         }}
       />
       <MaterialTabs.Screen
+        name="reports"
+        options={{
+          title: tr(language, 'reports'),
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="bar-chart-outline" size={21} color={color} />
+          ),
+        }}
+      />
+      <MaterialTabs.Screen
         name="more"
         options={{
           title: tr(language, 'more'),

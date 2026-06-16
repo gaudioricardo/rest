@@ -19,6 +19,7 @@ import ContactsView from './components/ContactsView';
 import ClientesView from './components/ClientesView';
 import AuthView from './components/AuthView';
 import SettingsView from './components/SettingsView';
+import ReportsView from './components/ReportsView';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
 import { generateInvoicePDF, generateFinancialReportPDF } from './lib/pdf';
@@ -1166,6 +1167,17 @@ export default function App() {
               <NewsView
                 language={language}
                 triggerToast={triggerToast}
+              />
+            )}
+
+            {activeTab === 'reports' && (
+              <ReportsView
+                invoices={invoices}
+                quotes={quotes}
+                receipts={receipts}
+                expenses={expenses}
+                language={language}
+                companySettings={companySettings}
               />
             )}
 

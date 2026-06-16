@@ -10,6 +10,7 @@ import {
   Receipt,
   Settings,
   UserRound,
+  BarChart2,
 } from 'lucide-react';
 import { Language } from '../types';
 
@@ -26,6 +27,7 @@ const mainItems = [
   { id: 'invoices', label: 'Invoices', labelPt: 'Facturas', icon: FileText },
   { id: 'receipts', label: 'Receipts', labelPt: 'Recibos', icon: Receipt },
   { id: 'clientes', label: 'Clients', labelPt: 'Clientes', icon: UserRound },
+  { id: 'reports', label: 'Reports', labelPt: 'Relatórios', icon: BarChart2 },
 ];
 
 export default function SidebarRight({
