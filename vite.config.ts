@@ -22,12 +22,15 @@ function b2UploadPlugin(
     const body: { fileName: string; contentType: string; fileData: string } =
       JSON.parse(Buffer.concat(chunks).toString('utf-8'));
 
-    // 1. Authorize (server-side — no CORS issue)
+    // 1. Authorize
     const creds = Buffer.from(`${b2KeyId}:${b2AppKey}`).toString('base64');
     const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
       headers: { Authorization: `Basic ${creds}` },
     });
-    if (!authRes.ok) throw new Error(`B2 auth failed: ${authRes.status}`);
+    if (!authRes.ok) {
+      const detail = await authRes.text().catch(() => '');
+      throw new Error(`B2 auth failed (${authRes.status}): ${detail}`);
+    }
     const auth: { authorizationToken: string; apiUrl: string; downloadUrl: string } =
       await authRes.json();
 
@@ -37,23 +40,29 @@ function b2UploadPlugin(
       headers: { Authorization: auth.authorizationToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({ bucketId: b2BucketId }),
     });
-    if (!urlRes.ok) throw new Error(`B2 get upload URL failed: ${urlRes.status}`);
+    if (!urlRes.ok) {
+      const detail = await urlRes.text().catch(() => '');
+      throw new Error(`B2 get_upload_url failed (${urlRes.status}): ${detail}`);
+    }
     const uploadInfo: { uploadUrl: string; authorizationToken: string } = await urlRes.json();
 
-    // 3. Upload file
-    const fileBuffer = Buffer.from(body.fileData, 'base64');
+    // 3. Upload — Node 22 native fetch (undici) sets Content-Length automatically
+    //    from the body; setting it manually causes a conflict and 500 error.
+    const fileBytes = new Uint8Array(Buffer.from(body.fileData, 'base64'));
     const uploadRes = await fetch(uploadInfo.uploadUrl, {
       method: 'POST',
       headers: {
-        Authorization: uploadInfo.authorizationToken,
-        'X-Bz-File-Name': encodeURIComponent(body.fileName),
-        'Content-Type': body.contentType,
-        'Content-Length': String(fileBuffer.length),
+        Authorization:      uploadInfo.authorizationToken,
+        'X-Bz-File-Name':   encodeURIComponent(body.fileName),
+        'Content-Type':     body.contentType || 'application/octet-stream',
         'X-Bz-Content-Sha1': 'do_not_verify',
       },
-      body: fileBuffer,
+      body: fileBytes,
     });
-    if (!uploadRes.ok) throw new Error(`B2 upload failed: ${uploadRes.status}`);
+    if (!uploadRes.ok) {
+      const detail = await uploadRes.text().catch(() => '');
+      throw new Error(`B2 upload failed (${uploadRes.status}): ${detail}`);
+    }
 
     const downloadUrl = `${auth.downloadUrl}/file/${b2BucketName}/${body.fileName}`;
     res.writeHead(200, { 'Content-Type': 'application/json' });

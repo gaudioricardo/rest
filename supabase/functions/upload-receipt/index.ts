@@ -7,7 +7,7 @@ const B2_BUCKET_NAME = Deno.env.get('B2_BUCKET_NAME') ?? '';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Headers': 'authorization, content-type, apikey, x-client-info',
 };
 
 Deno.serve(async (req) => {

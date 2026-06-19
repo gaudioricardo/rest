@@ -3,16 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { 
-  LayoutDashboard, 
-  FileCode, 
-  FileText, 
-  Receipt, 
-  Package, 
-  CreditCard, 
-  Users, 
-  Newspaper, 
-  HelpCircle, 
+import {
+  LayoutDashboard,
+  FileCode,
+  FileText,
+  Receipt,
+  Package,
+  CreditCard,
+  Users,
+  Megaphone,
+  HelpCircle,
   LogOut,
   Languages
 } from 'lucide-react';
@@ -42,7 +42,7 @@ export default function Sidebar({
     { id: 'stock', label: 'Stock', labelPt: 'Inventário', icon: Package },
     { id: 'expenses', label: 'Expenses', labelPt: 'Despesas', icon: CreditCard },
     { id: 'contacts', label: 'Contacts', labelPt: 'Contactos', icon: Users },
-    { id: 'news', label: 'News', labelPt: 'Notícias', icon: Newspaper },
+    { id: 'ufsa', label: 'UFSA', labelPt: 'UFSA', icon: Megaphone },
   ];
 
   const handleLanguageToggle = () => {

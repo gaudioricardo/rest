@@ -65,7 +65,7 @@ rest_web_app/
 │   │   ├── ReportsView.tsx      # Relatórios Financeiros (PDF + Excel) + botão Resultados e Métricas
 │   │   ├── MetricsView.tsx      # Resultados e Métricas (gráficos SVG, galeria comprovativos, PDF)
 │   │   ├── SettingsView.tsx     # Configurações da Empresa (wizard 5 passos)
-│   │   ├── NewsView.tsx         # Notícias / Actualizações
+│   │   ├── UfsaView.tsx         # Concursos Públicos UFSA (substituiu NewsView)
 │   │   ├── Header.tsx           # Cabeçalho dinâmico por tab
 │   │   ├── SidebarLeft.tsx      # Barra de navegação inferior esquerda
 │   │   ├── SidebarRight.tsx     # Barra de navegação inferior direita
@@ -294,6 +294,7 @@ npm run ios          # iOS
 
 | Data | Versão | Funcionalidade |
 |---|---|---|
+| 2026-06-19 | 1.5 | **Tela UFSA — Concursos Públicos** — Edge Function `ufsa-scraper` (Deno/TypeScript) faz scrape de ufsa.gov.mz a cada 6h via pg_cron; tabela `oportunidades` com upsert por referência; tela `UfsaView` com cards, filtros (modalidade/classe/moeda/regime), pesquisa, badges de urgência (<3 dias), link directo ao detalhe; badge vermelho no botão da sidebar quando há novos concursos; substitui tab News |
 | 2026-06-16 | 1.4 | **Donut charts lado-a-lado** em Resultados e Métricas — Despesas por Categoria e Métodos de Pagamento substituídos por donut charts (web: SVG; mobile: react-native-svg); disposição em 2 colunas reduz scroll |
 | 2026-06-16 | 1.3 | **Resultados e Métricas** — ecrã analítico profissional (gráficos receitas/despesas, top produtos, galeria de comprovativos, análise por método, exportação PDF); filtros 1m/3m/6m; PDFs mobile com nome correcto (INV-XXXX, COT-XXXX, REC-XXXX); categorias de despesas actualizadas (Matéria Prima, Comunicação e Internet, Transporte, Material de Escritório) |
 | 2026-06-16 | 1.2 | **Upload de comprovativo em Despesas** — campo opcional (foto/galeria mobile, ficheiro web) armazenado no Backblaze B2; ícone de paperclip na tabela; proxy server-side no Vite elimina CORS |

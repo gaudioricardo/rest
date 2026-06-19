@@ -11,7 +11,7 @@ import Header from './components/Header';
 import DashboardView from './components/DashboardView';
 import StockView from './components/StockView';
 import InvoicesView from './components/InvoicesView';
-import NewsView from './components/NewsView';
+import UfsaView from './components/UfsaView';
 import QuotesView from './components/QuotesView';
 import ReceiptsView from './components/ReceiptsView';
 import ExpensesView from './components/ExpensesView';
@@ -61,6 +61,7 @@ export default function App() {
   });
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasNewUfsa, setHasNewUfsa] = useState(false);
 
   // ─── ERP Data States (start empty – loaded from Supabase) ────────────────
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
@@ -1071,6 +1072,7 @@ export default function App() {
             }
           }}
           userName={userName}
+          hasNewUfsa={hasNewUfsa}
         />
 
         {/* Right Sidebar */}
@@ -1205,10 +1207,10 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'news' && (
-              <NewsView
+            {activeTab === 'ufsa' && (
+              <UfsaView
                 language={language}
-                triggerToast={triggerToast}
+                onNewItems={setHasNewUfsa}
               />
             )}
 

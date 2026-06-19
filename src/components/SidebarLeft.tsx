@@ -7,7 +7,7 @@ import {
   Package,
   CreditCard,
   Users,
-  HelpCircle,
+  Megaphone,
   LogOut,
   Languages,
 } from 'lucide-react';
@@ -20,6 +20,7 @@ interface SidebarLeftProps {
   setLanguage: (lang: Language) => void;
   onLogout: () => void;
   userName?: string;
+  hasNewUfsa?: boolean;
 }
 
 const mainItems = [
@@ -45,6 +46,7 @@ export default function SidebarLeft({
   setLanguage,
   onLogout,
   userName,
+  hasNewUfsa = false,
 }: SidebarLeftProps) {
   const initials = getInitials(userName);
 
@@ -92,16 +94,19 @@ export default function SidebarLeft({
         </button>
 
         <button
-          onClick={() => setActiveTab('news')}
-          title={language === 'en' ? 'News & Updates' : 'Notícias'}
-          className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all ${
-            activeTab === 'news'
+          onClick={() => setActiveTab('ufsa')}
+          title={language === 'en' ? 'UFSA Public Tenders' : 'Concursos UFSA'}
+          className={`relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all ${
+            activeTab === 'ufsa'
               ? 'bg-secondary/20 text-white shadow-inner'
               : 'text-slate-300 hover:bg-white/5 hover:text-white'
           }`}
         >
-          <HelpCircle size={16} className={activeTab === 'news' ? 'text-secondary' : 'text-slate-400'} />
-          <span className="font-medium tracking-wide">{language === 'en' ? 'News' : 'Notícias'}</span>
+          <Megaphone size={16} className={activeTab === 'ufsa' ? 'text-secondary' : 'text-slate-400'} />
+          <span className="font-medium tracking-wide">UFSA</span>
+          {hasNewUfsa && activeTab !== 'ufsa' && (
+            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-slate-900" />
+          )}
         </button>
 
         <button
