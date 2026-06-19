@@ -70,7 +70,7 @@ export default function QuoteDetailScreen() {
     setLoading(true);
     try {
       const uri = await generateQuotePdf(quote, company, items, { taxType, includeStamp });
-      await sharePdf(uri);
+      await sharePdf(uri, `${quote.quoteNumber}.pdf`);
     } catch (e) { showToast('Erro PDF', String(e), 'error'); }
     finally { setLoading(false); }
   };

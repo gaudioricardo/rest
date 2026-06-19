@@ -155,6 +155,7 @@ export function mapExpense(row: Record<string, unknown>): Expense {
       row.status === 'Approved' ? 'Aprovado' :
       row.status === 'Pending' ? 'Pendente' : 'Rejeitado',
     notes: (row.notes as string | undefined) ?? undefined,
+    receiptImageUrl: (row.receipt_image_url as string | undefined) ?? undefined,
   };
 }
 
@@ -436,6 +437,7 @@ export async function createExpense(payload: {
   amount: number;
   expenseDate: string;
   notes?: string;
+  receiptImageUrl?: string;
 }): Promise<Expense | null> {
   try {
     const { data, error } = await supabase
@@ -449,6 +451,7 @@ export async function createExpense(payload: {
         expense_date: payload.expenseDate,
         status: 'Pending',
         notes: payload.notes ?? null,
+        receipt_image_url: payload.receiptImageUrl ?? null,
       })
       .select()
       .single();

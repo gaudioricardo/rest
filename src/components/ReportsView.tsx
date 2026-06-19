@@ -7,12 +7,13 @@ import React, { useState, useMemo } from 'react';
 import {
   BarChart2, Download, FileSpreadsheet, Calendar,
   TrendingUp, TrendingDown, Clock, CheckCircle, XCircle,
-  FileText, FileCode, Receipt, CreditCard, AlertCircle,
+  FileText, FileCode, Receipt, CreditCard, AlertCircle, Activity,
 } from 'lucide-react';
 import { Invoice, Quote, Receipt as ReceiptType, Expense, Language, CompanySettings } from '../types';
 import { formatValue } from '../data';
 import { generateFilteredReportPDF } from '../lib/pdf';
 import { generateReportExcel } from '../lib/excel';
+import MetricsView from './MetricsView';
 
 interface ReportsViewProps {
   invoices: Invoice[];
@@ -84,6 +85,7 @@ export default function ReportsView({
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState(new Date().toISOString().slice(0, 10));
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
 
   const { from, to } = useMemo(() => {
     if (period === '1m') {
@@ -188,6 +190,20 @@ export default function ReportsView({
     },
   ];
 
+  if (showMetrics) {
+    return (
+      <MetricsView
+        invoices={invoices}
+        quotes={quotes}
+        receipts={receipts}
+        expenses={expenses}
+        language={language}
+        companySettings={companySettings}
+        onBack={() => setShowMetrics(false)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
 
@@ -203,11 +219,18 @@ export default function ReportsView({
           </p>
         </div>
 
-        {/* Export Buttons */}
-        <div className="flex items-center gap-2">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowMetrics(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/90 text-white text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+          >
+            <Activity size={14} />
+            {t('Results & Metrics', 'Resultados e Métricas')}
+          </button>
           <button
             onClick={handleExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
           >
             <FileSpreadsheet size={14} />
             Excel
@@ -215,7 +238,7 @@ export default function ReportsView({
           <button
             onClick={handlePDF}
             disabled={generatingPdf}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
           >
             <Download size={14} />
             {generatingPdf ? t('Generating...', 'A gerar...') : 'PDF'}

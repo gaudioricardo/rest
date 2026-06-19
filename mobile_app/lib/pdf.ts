@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { Invoice, Quote, Receipt, Expense, CompanySettings, DocumentItem } from '../shared/types';
@@ -605,9 +606,15 @@ export const generateReportPdf = async (
   return uri;
 };
 
-export const sharePdf = async (uri: string) => {
+export const sharePdf = async (uri: string, filename?: string) => {
   const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
+  if (!canShare) return;
+  if (filename) {
+    // Copy to a named file so the share sheet shows a readable name instead of a UUID path
+    const dest = `${FileSystem.cacheDirectory}${filename}`;
+    await FileSystem.copyAsync({ from: uri, to: dest });
+    await Sharing.shareAsync(dest, { UTI: '.pdf', mimeType: 'application/pdf', dialogTitle: filename });
+  } else {
     await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
   }
 };

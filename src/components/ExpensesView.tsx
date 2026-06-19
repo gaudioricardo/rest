@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { Expense, Language, Currency } from '../types';
 import { formatValue } from '../data';
-import { CreditCard, Plus, Search, HelpCircle, Check, Trash2 } from 'lucide-react';
+import { CreditCard, Plus, Search, HelpCircle, Check, Trash2, Paperclip } from 'lucide-react';
 import * as db from '../lib/db';
 import DeleteConfirmModal from './DeleteConfirmModal';
 
@@ -113,6 +113,7 @@ export default function ExpensesView({
               <th className="px-6 py-4 text-xs font-bold text-primary dark:text-slate-200 uppercase tracking-wider text-[10px] font-display">{language === 'en' ? 'Division Category' : 'Categoria'}</th>
               <th className="px-6 py-4 text-xs font-bold text-primary dark:text-slate-200 uppercase tracking-wider text-[10px] font-display">{language === 'en' ? 'Filing Date' : 'Data'}</th>
               <th className="px-6 py-4 text-xs font-bold text-primary dark:text-slate-200 uppercase tracking-wider text-[10px] font-display">{language === 'en' ? 'Verification' : 'Estado'}</th>
+              <th className="px-6 py-4 text-xs font-bold text-primary dark:text-slate-200 uppercase tracking-wider text-[10px] font-display text-center">{language === 'en' ? 'Receipt' : 'Comprovativo'}</th>
               <th className="px-6 py-4 text-xs font-bold text-primary dark:text-slate-200 uppercase tracking-wider text-[10px] font-display">{language === 'en' ? 'Outlay Sum' : 'Valor Pago'}</th>
               <th className="px-6 py-4 text-xs font-bold text-primary dark:text-slate-200 uppercase tracking-wider text-[10px] font-display text-right">{language === 'en' ? 'Actions' : 'Remover'}</th>
             </tr>
@@ -145,6 +146,21 @@ export default function ExpensesView({
                     }`}>
                       {language === 'en' ? exp.status : exp.statusPt}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    {exp.receiptImageUrl ? (
+                      <a
+                        href={exp.receiptImageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={language === 'en' ? 'View receipt image' : 'Ver comprovativo'}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors"
+                      >
+                        <Paperclip size={13} />
+                      </a>
+                    ) : (
+                      <span className="text-slate-250 dark:text-slate-700 text-[10px]">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-xs font-mono font-extrabold text-primary dark:text-white">
                     {formatValue(exp.amount, currency)}

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator,
+  View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -17,6 +17,73 @@ import { Badge, getInvoiceVariant } from '../../../components/ui/Badge';
 import { generateReportPdf, sharePdf } from '../../../lib/pdf';
 import { useToast } from '../../../components/ui/ToastContainer';
 import { TAB_BAR_BOTTOM_INSET } from '../../../components/ui/TabBar';
+
+const DOT_N = 4;
+
+type Palette = typeof Colors.light | typeof Colors.dark;
+
+function KpiSkeleton({ palette }: { palette: Palette }) {
+  const anims = React.useRef(
+    Array.from({ length: DOT_N }, () => new Animated.Value(0))
+  ).current;
+
+  React.useEffect(() => {
+    const anis = anims.map((a, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 130),
+          Animated.timing(a, { toValue: -7, duration: 280, useNativeDriver: true }),
+          Animated.timing(a, { toValue: 0, duration: 280, useNativeDriver: true }),
+          Animated.delay((DOT_N - i) * 130),
+        ])
+      )
+    );
+    anis.forEach(a => a.start());
+    return () => anis.forEach(a => a.stop());
+  }, []);
+
+  return (
+    <View style={[sk.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+      <View style={[sk.iconBox, { backgroundColor: palette.surface }]} />
+      <View style={sk.dotsRow}>
+        {anims.map((anim, i) => (
+          <Animated.View key={i} style={[sk.dot, { transform: [{ translateY: anim }] }]} />
+        ))}
+      </View>
+      <View style={[sk.titleBar, { backgroundColor: palette.surface }]} />
+    </View>
+  );
+}
+
+function TransactionSkeleton({ palette }: { palette: Palette }) {
+  const fade = React.useRef(new Animated.Value(0.3)).current;
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(fade, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(fade, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+    return () => fade.stopAnimation();
+  }, []);
+  return (
+    <>
+      {[0, 1, 2, 3, 4].map(i => (
+        <Animated.View key={i} style={[sk.txRow, { borderBottomColor: palette.border, opacity: fade }]}>
+          <View style={[sk.txAvatar, { backgroundColor: palette.surface }]} />
+          <View style={{ flex: 1, gap: 6 }}>
+            <View style={[sk.txLineA, { backgroundColor: palette.surface }]} />
+            <View style={[sk.txLineB, { backgroundColor: palette.surface }]} />
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+            <View style={[sk.txAmount, { backgroundColor: palette.surface }]} />
+            <View style={[sk.txBadge, { backgroundColor: palette.surface }]} />
+          </View>
+        </Animated.View>
+      ))}
+    </>
+  );
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -93,47 +160,30 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading && !refreshing && (
-        <View style={styles.loadingBar}>
-          <ActivityIndicator size="small" color={Colors.primary} />
-          <Text style={[styles.loadingText, { color: palette.textMuted }]}>
-            {lang === 'pt' ? 'A carregar dados...' : 'Loading data...'}
-          </Text>
-        </View>
-      )}
-
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
         {/* KPIs */}
         <View style={styles.kpiGrid}>
-          <KpiCard
-            title={tr(lang, 'salesToday')}
-            value={formatCurrency(salesToday)}
-            icon="cash-outline"
-            iconColor={Colors.success}
-          />
-          <KpiCard
-            title={tr(lang, 'monthlyRevenue')}
-            value={formatCurrency(monthlyRevenue)}
-            icon="trending-up-outline"
-            iconColor={Colors.primary}
-          />
+          {loading && !refreshing ? (
+            <><KpiSkeleton palette={palette} /><KpiSkeleton palette={palette} /></>
+          ) : (
+            <>
+              <KpiCard title={tr(lang, 'salesToday')} value={formatCurrency(salesToday)} icon="cash-outline" iconColor={Colors.success} />
+              <KpiCard title={tr(lang, 'monthlyRevenue')} value={formatCurrency(monthlyRevenue)} icon="trending-up-outline" iconColor={Colors.primary} />
+            </>
+          )}
         </View>
         <View style={styles.kpiGrid}>
-          <KpiCard
-            title={tr(lang, 'pendingInvoices')}
-            value={`${pendingCount} · ${formatCurrency(pendingAmount)}`}
-            icon="time-outline"
-            iconColor={Colors.warning}
-          />
-          <KpiCard
-            title={tr(lang, 'lowStockItems')}
-            value={String(lowStockCount)}
-            icon="warning-outline"
-            iconColor={Colors.error}
-          />
+          {loading && !refreshing ? (
+            <><KpiSkeleton palette={palette} /><KpiSkeleton palette={palette} /></>
+          ) : (
+            <>
+              <KpiCard title={tr(lang, 'pendingInvoices')} value={`${pendingCount} · ${formatCurrency(pendingAmount)}`} icon="time-outline" iconColor={Colors.warning} />
+              <KpiCard title={tr(lang, 'lowStockItems')} value={String(lowStockCount)} icon="warning-outline" iconColor={Colors.error} />
+            </>
+          )}
         </View>
 
         {/* Quick Actions */}
@@ -166,7 +216,9 @@ export default function DashboardScreen() {
         {/* Recent Transactions */}
         <Text style={[styles.sectionTitle, { color: palette.text }]}>{tr(lang, 'recentTransactions')}</Text>
         <Card padding={0} style={{ overflow: 'hidden' }}>
-          {recentInvoices.length === 0 ? (
+          {loading && !refreshing ? (
+            <TransactionSkeleton palette={palette} />
+          ) : recentInvoices.length === 0 ? (
             <Text style={[styles.empty, { color: palette.textMuted }]}>{tr(lang, 'noData')}</Text>
           ) : (
             recentInvoices.map((inv, i) => (
@@ -249,11 +301,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 36,
   },
-  loadingBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 8,
-  },
-  loadingText: { fontSize: FontSize.xs },
   scroll: { padding: Spacing.md, gap: Spacing.sm, paddingBottom: TAB_BAR_BOTTOM_INSET },
   kpiGrid: { flexDirection: 'row', gap: Spacing.sm },
   sectionTitle: {
@@ -301,4 +348,42 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: '100%', borderRadius: 3 },
   stockLevel: { fontSize: 12, fontWeight: '600', minWidth: 48, textAlign: 'right' },
+});
+
+const sk = StyleSheet.create({
+  card: {
+    flex: 1,
+    minWidth: 140,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: Spacing.md,
+  },
+  iconBox: {
+    width: 40, height: 40, borderRadius: 10, marginBottom: 12,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 5,
+    height: 24,
+    marginBottom: 10,
+  },
+  dot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#805522',
+  },
+  titleBar: {
+    height: 8, borderRadius: 4, width: '60%',
+  },
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    gap: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  txAvatar: { width: 40, height: 40, borderRadius: 20 },
+  txLineA: { height: 10, borderRadius: 5, width: '70%' },
+  txLineB: { height: 8, borderRadius: 4, width: '45%' },
+  txAmount: { height: 10, borderRadius: 5, width: 60 },
+  txBadge: { height: 18, borderRadius: 9, width: 50 },
 });

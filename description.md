@@ -24,6 +24,7 @@ A plataforma existe em duas versões que partilham o mesmo backend Supabase:
 - **Framework:** React 19 + Vite 6
 - **Estilos:** Tailwind CSS v4
 - **Backend/Auth:** Supabase (PostgreSQL + Auth)
+- **Armazenamento de ficheiros:** Backblaze B2 (via plugin Vite server-side — sem CORS)
 - **PDF:** jsPDF + jsPDF-autoTable + html2canvas
 - **Excel:** SheetJS (xlsx)
 - **Ícones:** Lucide React
@@ -34,6 +35,7 @@ A plataforma existe em duas versões que partilham o mesmo backend Supabase:
 - **Framework:** Expo SDK 52 + Expo Router 4
 - **Estado:** Zustand (authStore, dataStore, settingsStore)
 - **Backend/Auth:** @supabase/supabase-js + AsyncStorage
+- **Armazenamento de ficheiros:** Backblaze B2 (chamada directa — sem CORS em apps nativas)
 - **PDF:** expo-print + expo-sharing
 - **Excel/CSV:** expo-file-system + expo-sharing
 - **Fontes:** @expo-google-fonts/playfair-display
@@ -60,7 +62,8 @@ rest_web_app/
 │   │   ├── StockView.tsx        # Gestão de Inventário
 │   │   ├── ContactsView.tsx     # Directório de Contactos
 │   │   ├── ClientesView.tsx     # Clientes Devedores
-│   │   ├── ReportsView.tsx      # Relatórios Financeiros (PDF + Excel)
+│   │   ├── ReportsView.tsx      # Relatórios Financeiros (PDF + Excel) + botão Resultados e Métricas
+│   │   ├── MetricsView.tsx      # Resultados e Métricas (gráficos SVG, galeria comprovativos, PDF)
 │   │   ├── SettingsView.tsx     # Configurações da Empresa (wizard 5 passos)
 │   │   ├── NewsView.tsx         # Notícias / Actualizações
 │   │   ├── Header.tsx           # Cabeçalho dinâmico por tab
@@ -72,7 +75,8 @@ rest_web_app/
 │       ├── supabase.ts          # Cliente Supabase
 │       ├── db.ts                # Todas as operações CRUD (Supabase)
 │       ├── pdf.ts               # Geração de PDF (Facturas, Cotações, Recibos, Relatórios)
-│       └── excel.ts             # Geração de Excel (Relatório financeiro, 5 sheets)
+│       ├── excel.ts             # Geração de Excel (Relatório financeiro, 5 sheets)
+│       └── b2.ts                # Upload de comprovativos para Backblaze B2 (via /api/b2/upload)
 │
 └── mobile_app/
     ├── app/
@@ -91,6 +95,7 @@ rest_web_app/
     │       ├── invoice/         # Detalhe / criação de Factura
     │       ├── quote/           # Detalhe / criação de Cotação
     │       ├── receipt/         # Detalhe / criação de Recibo
+    │       ├── metrics.tsx      # Resultados e Métricas (gráficos, galeria, PDF)
     │       ├── stock/           # Gestão de Stock
     │       ├── expense/         # Registo de Despesas
     │       ├── contact/         # Contactos
@@ -102,7 +107,8 @@ rest_web_app/
     │   └── settingsStore.ts
     ├── lib/
     │   ├── db.ts                # CRUD Supabase (mobile)
-    │   └── pdf.ts               # Geração PDF via expo-print (HTML → PDF)
+    │   ├── pdf.ts               # Geração PDF via expo-print (HTML → PDF)
+    │   └── b2.ts                # Upload de comprovativos para Backblaze B2 (chamada directa)
     ├── shared/
     │   ├── types.ts             # Tipos TypeScript partilhados
     │   ├── theme.ts             # Colors, Spacing, Radius, FontSize, Shadow
@@ -149,8 +155,9 @@ rest_web_app/
 
 ### Despesas (`EXP-XXXX`)
 - Registo por comerciante, categoria e data
-- Categorias: Logística, Material de Escritório, Infraestrutura Cloud
+- Categorias: Logística, Matéria Prima, Comunicação e Internet, Transporte, Material de Escritório, Outro
 - Estados: Aprovado / Pendente / Rejeitado
+- **Upload de comprovativo (opcional):** fotografia ou imagem da galeria armazenada no Backblaze B2; ícone de paperclip na tabela abre o comprovativo numa nova aba
 
 ### Stock / Inventário
 - Artigos com SKU, categoria, nível actual e máximo
@@ -178,6 +185,16 @@ rest_web_app/
 - **Exportação PDF** — landscape A4, logótipo da empresa, 6 KPIs, 4 tabelas com totais por secção
 - **Exportação Excel** (web) — 5 sheets: Resumo, Facturas, Cotações, Recibos, Despesas
 - **Exportação CSV** (mobile) — partilha via expo-sharing, compatível com Excel / Google Sheets
+
+### Resultados e Métricas
+Ecrã analítico profissional acessível a partir dos Relatórios Financeiros:
+- **Filtros de período:** Último mês, Últimos 3 meses, Últimos 6 meses
+- **6 KPIs instantâneos:** Resultado Líquido, Total Facturado, Total Recebido, Total Despesas, Taxa de Cobrança, Nº de Comprovativos Anexados
+- **Gráfico de barras:** Receitas vs Despesas por mês (web: SVG; mobile: View-based horizontal scroll)
+- **Despesas por Categoria + Métodos de Pagamento:** donut charts lado-a-lado (web: SVG inline; mobile: react-native-svg); legenda compacta com cor + nome + percentagem
+- **Top 5 produtos mais vendidos / 5 menos vendidos** (baseado em itens de facturas)
+- **Galeria de comprovativos de despesas:** miniaturas com ref., comerciante e valor; clique → full-screen (mobile: Modal; web: nova aba)
+- **Exportação PDF** com todos os indicadores (web: jsPDF; mobile: expo-print HTML → expo-sharing)
 
 ### Configurações da Empresa (wizard 5 passos)
 1. **Empresa** — Nome, NUIT, morada, cidade
@@ -248,7 +265,7 @@ Tabelas principais (partilhadas entre web e mobile via mesmo projecto Supabase):
 | `quotes` | Cotações / propostas |
 | `quote_items` | Linhas de item das cotações |
 | `receipts` | Recibos de pagamento |
-| `expenses` | Despesas operacionais |
+| `expenses` | Despesas operacionais (inclui `receipt_image_url TEXT` para comprovativos) |
 | `stock_items` | Inventário |
 | `contacts` | Directório de contactos |
 | `debt_clients` | Clientes devedores |
@@ -277,6 +294,9 @@ npm run ios          # iOS
 
 | Data | Versão | Funcionalidade |
 |---|---|---|
+| 2026-06-16 | 1.4 | **Donut charts lado-a-lado** em Resultados e Métricas — Despesas por Categoria e Métodos de Pagamento substituídos por donut charts (web: SVG; mobile: react-native-svg); disposição em 2 colunas reduz scroll |
+| 2026-06-16 | 1.3 | **Resultados e Métricas** — ecrã analítico profissional (gráficos receitas/despesas, top produtos, galeria de comprovativos, análise por método, exportação PDF); filtros 1m/3m/6m; PDFs mobile com nome correcto (INV-XXXX, COT-XXXX, REC-XXXX); categorias de despesas actualizadas (Matéria Prima, Comunicação e Internet, Transporte, Material de Escritório) |
+| 2026-06-16 | 1.2 | **Upload de comprovativo em Despesas** — campo opcional (foto/galeria mobile, ficheiro web) armazenado no Backblaze B2; ícone de paperclip na tabela; proxy server-side no Vite elimina CORS |
 | 2026-06-16 | 1.1 | Aba **Relatórios Financeiros** (web + mobile) — filtros de período, 6 KPIs, 4 tabelas com breakdown de estado, exportação PDF + Excel (web) / PDF + CSV (mobile) |
 | 2026-06-16 | 1.1 | **Logótipo da empresa** adicionado ao PDF do Relatório Financeiro (web jsPDF + mobile HTML) |
 | — | 1.0 | Versão inicial — Autenticação, Dashboard, Cotações, Facturas, Recibos, Despesas, Stock, Contactos, Clientes Devedores, Configurações multi-empresa, PDF de documentos fiscais, Dark mode, PT/EN |

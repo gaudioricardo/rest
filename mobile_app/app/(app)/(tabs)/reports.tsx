@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -90,6 +91,7 @@ function buildCsv(
 }
 
 export default function ReportsScreen() {
+  const router = useRouter();
   const { language, darkMode, company } = useSettingsStore();
   const companySettings = company ?? { companyName: '', nuit: '', address: '', city: '', phone: '', email: '', bankAccounts: [], mobileContacts: [], setupComplete: false };
   const { invoices, quotes, receipts, expenses } = useDataStore();
@@ -153,7 +155,8 @@ export default function ReportsScreen() {
         filteredInvoices, filteredQuotes, filteredReceipts, filteredExpenses,
         periodLabel
       );
-      await sharePdf(uri);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await sharePdf(uri, `Relatorio_${dateStr}.pdf`);
     } catch (e) {
       Alert.alert('Erro', 'Falha ao gerar PDF.');
     } finally {
@@ -370,6 +373,26 @@ export default function ReportsScreen() {
           }))}
           lang={lang}
         />
+
+        {/* Resultados e Métricas */}
+        <TouchableOpacity
+          onPress={() => router.push('/(app)/metrics' as any)}
+          style={[styles.metricsCard, { backgroundColor: Colors.secondary }]}
+          activeOpacity={0.85}
+        >
+          <View style={styles.metricsLeft}>
+            <Ionicons name="analytics-outline" size={22} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.metricsTitle}>
+                {lang === 'pt' ? 'Resultados e Métricas' : 'Results & Metrics'}
+              </Text>
+              <Text style={styles.metricsSub}>
+                {lang === 'pt' ? 'Gráficos, top produtos, comprovativos e mais' : 'Charts, top products, receipts and more'}
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
 
         {/* Balance Footer */}
         <View style={[styles.balanceCard, { backgroundColor: Colors.primary }]}>
@@ -593,4 +616,15 @@ const styles = StyleSheet.create({
   balanceItem: { flex: 1, minWidth: '40%' },
   balanceLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5 },
   balanceValue: { fontSize: 14, fontWeight: '800', marginTop: 2 },
+
+  metricsCard: {
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  metricsLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+  metricsTitle: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  metricsSub: { color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 2 },
 });

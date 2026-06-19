@@ -76,7 +76,7 @@ export default function InvoiceDetailScreen() {
     setLoading(true);
     try {
       const uri = await generateInvoicePdf(invoice, company, items, { taxType, includeStamp });
-      await sharePdf(uri);
+      await sharePdf(uri, `${invoice.invoiceNumber}.pdf`);
     } catch (e) {
       showToast('Erro PDF', String(e), 'error');
     } finally {

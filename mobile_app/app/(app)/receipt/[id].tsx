@@ -37,7 +37,7 @@ export default function ReceiptDetailScreen() {
     setLoading(true);
     try {
       const uri = await generateReceiptPdf(receipt, company);
-      await sharePdf(uri);
+      await sharePdf(uri, `${receipt.receiptNumber}.pdf`);
     } catch (e) { showToast('Erro PDF', String(e), 'error'); }
     finally { setLoading(false); }
   };

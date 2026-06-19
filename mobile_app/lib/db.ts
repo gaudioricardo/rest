@@ -477,6 +477,7 @@ const mapExpense = (row: any): Expense => ({
     row.status === 'Approved' ? 'Aprovado' :
     row.status === 'Rejected' ? 'Rejeitado' : 'Pendente',
   notes: row.notes,
+  receiptImageUrl: row.receipt_image_url ?? undefined,
 });
 
 export const getExpenses = async (userId: string): Promise<Expense[]> => {
@@ -491,6 +492,7 @@ export const getExpenses = async (userId: string): Promise<Expense[]> => {
 export const createExpense = async (userId: string, exp: {
   merchant: string; category: string; categoryPt: string;
   amount: number; expenseDate: string; notes?: string; status?: Expense['status'];
+  receiptImageUrl?: string;
 }) => {
   const { error } = await supabase.from('expenses').insert({
     user_id: userId,
@@ -501,6 +503,7 @@ export const createExpense = async (userId: string, exp: {
     expense_date: exp.expenseDate,
     notes: exp.notes,
     status: exp.status ?? 'Pending',
+    receipt_image_url: exp.receiptImageUrl ?? null,
   });
   if (error) throw error;
 };

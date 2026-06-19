@@ -23,8 +23,9 @@ import ReportsView from './components/ReportsView';
 import { supabase } from './lib/supabase';
 import * as db from './lib/db';
 import { generateInvoicePDF, generateFinancialReportPDF } from './lib/pdf';
+import { uploadReceiptImage } from './lib/b2';
 
-import { X, Check, Info, Mail, Phone, Database, Plus, Trash2 } from 'lucide-react';
+import { X, Check, Info, Mail, Phone, Database, Plus, Trash2, Paperclip, Upload, WifiOff } from 'lucide-react';
 import { formatValue } from './data';
 import logoUrl from './assets/Logo.webp';
 
@@ -76,10 +77,25 @@ export default function App() {
   // Modal state
   const [activeModal, setActiveModal] = useState<string | null>(null);
 
+  // ─── Online status ────────────────────────────────────────────────────────
+  const [isOnline, setIsOnline] = useState<boolean>(() => navigator.onLine);
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
   // Company settings & user info
+  // Seed setupComplete from cache so the first-setup wizard never flashes on reload
   const [companySettings, setCompanySettings] = useState<CompanySettings>({
     companyName: '', nuit: '', address: '', city: '', phone: '', email: '',
-    bankAccounts: [], mobileContacts: [], setupComplete: false,
+    bankAccounts: [], mobileContacts: [],
+    setupComplete: localStorage.getItem('invstock_setup') === 'true',
   });
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
@@ -122,6 +138,8 @@ export default function App() {
   const [formExpenseAmount, setFormExpenseAmount] = useState('');
   const [formExpenseDate, setFormExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [formExpenseNotes, setFormExpenseNotes] = useState('');
+  const [formExpenseReceiptFile, setFormExpenseReceiptFile] = useState<File | null>(null);
+  const [formExpenseUploading, setFormExpenseUploading] = useState(false);
 
   // Form state – Contact
   const [formContactName, setFormContactName] = useState('');
@@ -209,11 +227,13 @@ export default function App() {
 
     if (settingsData) {
       setCompanySettings(settingsData);
+      localStorage.setItem('invstock_setup', settingsData.setupComplete ? 'true' : 'false');
       if (!settingsData.setupComplete) {
         setActiveTab('settings');
       }
     } else {
       // No settings yet → force setup
+      localStorage.removeItem('invstock_setup');
       setActiveTab('settings');
     }
 
@@ -242,6 +262,7 @@ export default function App() {
     });
     setUserEmail('');
     setUserName('');
+    localStorage.removeItem('invstock_setup');
   }
 
   // Favicon dinâmico com o logotipo
@@ -342,7 +363,10 @@ export default function App() {
   const handleSaveSettings = async (updates: Partial<CompanySettings>) => {
     if (!currentUserId) return;
     const updated = await db.upsertCompanySettings(currentUserId, updates);
-    if (updated) setCompanySettings(updated);
+    if (updated) {
+      setCompanySettings(updated);
+      localStorage.setItem('invstock_setup', updated.setupComplete ? 'true' : 'false');
+    }
   };
 
   const handleDeleteSecondaryCompany = async () => {
@@ -719,9 +743,25 @@ export default function App() {
 
     const categoryPtMap: Record<string, string> = {
       Logistics: 'Logística',
+      'Raw Materials': 'Matéria Prima',
+      'Communication & Internet': 'Comunicação e Internet',
+      Transport: 'Transporte',
       'Office Supplies': 'Material de Escritório',
-      'Cloud Infrastructure': 'Infraestrutura Cloud',
+      Other: 'Outro',
     };
+
+    let receiptImageUrl: string | undefined;
+    if (formExpenseReceiptFile) {
+      setFormExpenseUploading(true);
+      try {
+        receiptImageUrl = await uploadReceiptImage(formExpenseReceiptFile, currentUserId);
+      } catch {
+        triggerToast('Upload Error', 'Erro de Upload', 'Failed to upload receipt image.', 'Falha ao enviar imagem do comprovativo.', 'error');
+        setFormExpenseUploading(false);
+        return;
+      }
+      setFormExpenseUploading(false);
+    }
 
     const newExp = await db.createExpense({
       userId: currentUserId,
@@ -731,6 +771,7 @@ export default function App() {
       amount: amt,
       expenseDate: formExpenseDate || new Date().toISOString().slice(0, 10),
       notes: formExpenseNotes.trim() || undefined,
+      receiptImageUrl,
     });
 
     if (newExp) {
@@ -740,6 +781,7 @@ export default function App() {
       setFormExpenseAmount('');
       setFormExpenseNotes('');
       setFormExpenseDate(new Date().toISOString().slice(0, 10));
+      setFormExpenseReceiptFile(null);
       triggerToast(
         'Expense Dispatched',
         'Despesa Enviada',
@@ -1265,7 +1307,10 @@ export default function App() {
           language={language}
           settings={companySettings}
           onSave={handleSaveSettings}
-          onComplete={() => setCompanySettings(prev => ({ ...prev, setupComplete: true }))}
+          onComplete={() => {
+            setCompanySettings(prev => ({ ...prev, setupComplete: true }));
+            localStorage.setItem('invstock_setup', 'true');
+          }}
           isFirstSetup={true}
           onGenerateModel={handleGenerateModel}
           userId={currentUserId ?? undefined}
@@ -1896,8 +1941,11 @@ export default function App() {
                         className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-105 font-semibold"
                       >
                         <option value="Logistics">{language === 'en' ? 'Logistics' : 'Logística'}</option>
+                        <option value="Raw Materials">{language === 'en' ? 'Raw Materials' : 'Matéria Prima'}</option>
+                        <option value="Communication & Internet">{language === 'en' ? 'Communication & Internet' : 'Comunicação e Internet'}</option>
+                        <option value="Transport">{language === 'en' ? 'Transport' : 'Transporte'}</option>
                         <option value="Office Supplies">{language === 'en' ? 'Office Supplies' : 'Material de Escritório'}</option>
-                        <option value="Cloud Infrastructure">{language === 'en' ? 'Cloud Infrastructure' : 'Infraestrutura Cloud'}</option>
+                        <option value="Other">{language === 'en' ? 'Other' : 'Outro'}</option>
                       </select>
                     </div>
 
@@ -1936,6 +1984,56 @@ export default function App() {
                     />
                   </div>
 
+                  {/* Receipt image upload */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <Paperclip size={10} />
+                      {language === 'en' ? 'Receipt / Proof of Payment (optional)' : 'Comprovativo / Recibo (opcional)'}
+                    </label>
+                    <div
+                      className="relative border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-4 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors group"
+                      onClick={() => document.getElementById('expense-receipt-input')?.click()}
+                    >
+                      {formExpenseReceiptFile ? (
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={URL.createObjectURL(formExpenseReceiptFile)}
+                            alt="Receipt preview"
+                            className="w-14 h-14 object-cover rounded-lg border border-slate-200 dark:border-slate-700 flex-shrink-0"
+                          />
+                          <div className="text-left flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">{formExpenseReceiptFile.name}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{(formExpenseReceiptFile.size / 1024).toFixed(1)} KB</p>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setFormExpenseReceiptFile(null); }}
+                              className="text-[10px] text-red-500 hover:text-red-700 mt-1 font-semibold cursor-pointer"
+                            >
+                              {language === 'en' ? 'Remove' : 'Remover'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5 py-1 text-slate-400 group-hover:text-blue-500 transition-colors">
+                          <Upload size={18} />
+                          <p className="text-[10px] font-semibold">{language === 'en' ? 'Click to attach receipt image' : 'Clique para anexar imagem do comprovativo'}</p>
+                          <p className="text-[9px] text-slate-300 dark:text-slate-600">PNG, JPG, WEBP — máx. 10 MB</p>
+                        </div>
+                      )}
+                      <input
+                        id="expense-receipt-input"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/jpg"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) setFormExpenseReceiptFile(f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex justify-end gap-3 pt-4">
                     <button
                       type="button"
@@ -1946,9 +2044,13 @@ export default function App() {
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg"
+                      disabled={formExpenseUploading}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold text-xs rounded-lg flex items-center gap-2"
                     >
-                      {language === 'en' ? 'Save record' : 'Salvar Despesa'}
+                      {formExpenseUploading && <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                      {formExpenseUploading
+                        ? (language === 'en' ? 'Uploading...' : 'A enviar...')
+                        : (language === 'en' ? 'Save record' : 'Salvar Despesa')}
                     </button>
                   </div>
                 </form>
@@ -2325,6 +2427,29 @@ export default function App() {
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* OFFLINE OVERLAY */}
+      {!isOnline && (
+        <div className="fixed inset-0 z-[9998] bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm flex flex-col items-center justify-center gap-6 text-center px-6">
+          <div className="w-20 h-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <WifiOff size={36} className="text-slate-400 dark:text-slate-500" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-playfair text-2xl font-bold text-slate-800 dark:text-white">
+              {language === 'en' ? 'No internet connection' : 'Sem ligação à internet'}
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed">
+              {language === 'en'
+                ? 'Check your connection. The app will reconnect automatically.'
+                : 'Verifique a sua ligação. A aplicação vai reconectar automaticamente.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse inline-block" />
+            {language === 'en' ? 'Waiting for connection...' : 'A aguardar ligação...'}
           </div>
         </div>
       )}

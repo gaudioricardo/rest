@@ -110,6 +110,7 @@ export interface Expense {
   status: 'Approved' | 'Pending' | 'Rejected';
   statusPt: 'Aprovado' | 'Pendente' | 'Rejeitado';
   notes?: string;
+  receiptImageUrl?: string;
 }
 
 export interface Contact {
