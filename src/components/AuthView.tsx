@@ -106,21 +106,7 @@ export default function AuthView({
     <div id="auth-screen-container" className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 flex flex-col justify-between p-6 md:p-12 transition-colors">
 
       {/* Top bar with language selection */}
-      <div className="w-full max-w-7xl mx-auto flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-lg">
-            <span className="text-secondary font-black text-sm hanken">I</span>
-          </div>
-          <div>
-            <h1 className="text-base font-black tracking-tight text-primary dark:text-white hanken leading-none">
-              InvStock
-            </h1>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-              ERP SYSTEM
-            </p>
-          </div>
-        </div>
-
+      <div className="w-full max-w-7xl mx-auto flex justify-end items-center">
         <button
           onClick={toggleLanguage}
           className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all font-semibold"
