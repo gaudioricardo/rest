@@ -724,7 +724,7 @@ export default function App() {
         'Simulation proposal launched',
         'Proposta simulada',
         `Proposal draft ${newQt.quoteNumber} holds net status approval flow.`,
-        `Criação do esboço de orçamento ${newQt.quoteNumber} adicionado para autorizações.`,
+        `Criação do esboço de Cotação${newQt.quoteNumber} adicionado para autorizações.`,
         'success'
       );
     } else {

@@ -49,7 +49,7 @@ export default function QuoteDetailScreen() {
     try {
       await updateQuoteStatus(quote.id, 'Approved');
       await loadQuotes(userId);
-      showToast(lang === 'pt' ? 'Orçamento aprovado' : 'Quote approved', undefined, 'success');
+      showToast(lang === 'pt' ? 'Cotação aprovado' : 'Quote approved', undefined, 'success');
     } catch { showToast('Erro', '', 'error'); }
     finally { setLoading(false); }
   };
@@ -60,7 +60,7 @@ export default function QuoteDetailScreen() {
     try {
       await updateQuoteStatus(quote.id, 'Rejected');
       await loadQuotes(userId);
-      showToast(lang === 'pt' ? 'Orçamento rejeitado' : 'Quote rejected', undefined, 'info');
+      showToast(lang === 'pt' ? 'Cotação rejeitada' : 'Quote rejected', undefined, 'info');
     } catch { showToast('Erro', '', 'error'); }
     finally { setLoading(false); }
   };
@@ -81,7 +81,7 @@ export default function QuoteDetailScreen() {
     try {
       await deleteQuote(quote.id);
       await loadQuotes(userId);
-      showToast(lang === 'pt' ? 'Orçamento eliminado' : 'Quote deleted', undefined, 'info');
+      showToast(lang === 'pt' ? 'Cotação eliminado' : 'Quote deleted', undefined, 'info');
       router.back();
     } catch { showToast('Erro', '', 'error'); }
     finally { setDeleting(false); setShowDelete(false); }

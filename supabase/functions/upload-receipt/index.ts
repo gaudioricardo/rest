@@ -1,8 +1,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const B2_KEY_ID     = Deno.env.get('B2_KEY_ID') ?? '';
-const B2_APP_KEY    = Deno.env.get('B2_APPLICATION_KEY') ?? '';
-const B2_BUCKET_ID  = Deno.env.get('B2_BUCKET_ID') ?? '';
+const B2_KEY_ID      = Deno.env.get('B2_KEY_ID') ?? '';
+const B2_APP_KEY     = Deno.env.get('B2_APPLICATION_KEY') ?? '';
+const B2_BUCKET_ID   = Deno.env.get('B2_BUCKET_ID') ?? '';
 const B2_BUCKET_NAME = Deno.env.get('B2_BUCKET_NAME') ?? '';
 
 const CORS = {
@@ -32,16 +32,7 @@ Deno.serve(async (req) => {
     return json({ error: 'B2 not configured on server' }, 503);
   }
 
-  const { fileName, contentType, fileData } =
-    (await req.json()) as { fileName: string; contentType: string; fileData: string };
-
-  // Ensure the upload path belongs to the authenticated user
-  const expectedPrefix = `expenses/${user.id}/`;
-  if (!fileName.startsWith(expectedPrefix)) {
-    return json({ error: 'Forbidden' }, 403);
-  }
-
-  // 1. Authorize with B2
+  // Authorize with B2 (shared for both upload and view)
   const creds = btoa(`${B2_KEY_ID}:${B2_APP_KEY}`);
   const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
     headers: { Authorization: `Basic ${creds}` },
@@ -49,7 +40,44 @@ Deno.serve(async (req) => {
   if (!authRes.ok) return json({ error: 'B2 auth failed' }, 502);
   const auth = await authRes.json();
 
-  // 2. Get upload URL
+  const body = await req.json() as Record<string, string>;
+
+  // ── VIEW action ──────────────────────────────────────────────────────────────
+  if (body.action === 'view') {
+    const { key } = body;
+    if (!key) return json({ error: 'Missing key' }, 400);
+
+    // Security: only allow access to the authenticated user's own files
+    const expectedPrefix = `expenses/${user.id}/`;
+    if (!key.startsWith(expectedPrefix)) {
+      return json({ error: 'Forbidden' }, 403);
+    }
+
+    const downloadUrl = `${auth.downloadUrl}/file/${B2_BUCKET_NAME}/${encodeURIComponent(key)}`;
+    const dlRes = await fetch(downloadUrl, {
+      headers: { Authorization: auth.authorizationToken },
+    });
+    if (!dlRes.ok) return json({ error: `B2 download failed: ${dlRes.status}` }, 502);
+
+    const contentType = dlRes.headers.get('Content-Type') ?? 'image/jpeg';
+    const buffer = await dlRes.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const imageData = btoa(binary);
+
+    return json({ imageData, contentType }, 200);
+  }
+
+  // ── UPLOAD action (default) ──────────────────────────────────────────────────
+  const { fileName, contentType, fileData } = body;
+
+  const expectedPrefix = `expenses/${user.id}/`;
+  if (!fileName.startsWith(expectedPrefix)) {
+    return json({ error: 'Forbidden' }, 403);
+  }
+
+  // Get upload URL
   const urlRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_get_upload_url`, {
     method: 'POST',
     headers: { Authorization: auth.authorizationToken, 'Content-Type': 'application/json' },
@@ -58,7 +86,6 @@ Deno.serve(async (req) => {
   if (!urlRes.ok) return json({ error: 'B2 get upload URL failed' }, 502);
   const uploadInfo = await urlRes.json();
 
-  // 3. Upload
   const fileBytes = Uint8Array.from(atob(fileData), (c) => c.charCodeAt(0));
   const uploadRes = await fetch(uploadInfo.uploadUrl, {
     method: 'POST',

@@ -73,8 +73,10 @@ export default function ExpenseListScreen() {
         ListEmptyComponent={<Text style={[styles.empty, { color: palette.textMuted }]}>{tr(lang, 'noData')}</Text>}
         renderItem={({ item }) => (
           <TouchableOpacity
+            onPress={() => router.push(`/(app)/expense/${item.id}` as never)}
             onLongPress={() => setDeleteId(item.id)}
             style={[styles.expCard, { backgroundColor: palette.card, borderColor: palette.border }]}
+            activeOpacity={0.75}
           >
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -92,6 +94,9 @@ export default function ExpenseListScreen() {
               </View>
               {item.notes && <Text style={{ color: palette.textMuted, fontSize: 11, marginTop: 4 }}>{item.notes}</Text>}
             </View>
+            {item.receiptImageUrl && (
+              <Ionicons name="attach-outline" size={15} color={palette.textMuted} style={{ marginLeft: 8 }} />
+            )}
           </TouchableOpacity>
         )}
       />

@@ -4,6 +4,7 @@ import { Invoice, Quote, Receipt as ReceiptType, Expense, Language, CompanySetti
 import { formatValue } from '../data';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import ReceiptImageModal, { ReceiptThumbnail } from './ReceiptImageModal';
 
 interface MetricsViewProps {
   invoices: Invoice[];
@@ -181,6 +182,7 @@ export default function MetricsView({
     return d.toISOString().slice(0, 10);
   });
   const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [previewUrl, setPreviewUrl] = useState<{ url: string; label: string } | null>(null);
 
   void quotes;
 
@@ -434,6 +436,15 @@ export default function MetricsView({
   return (
     <div className="space-y-5">
 
+      {previewUrl && (
+        <ReceiptImageModal
+          b2Url={previewUrl.url}
+          label={previewUrl.label}
+          language={language}
+          onClose={() => setPreviewUrl(null)}
+        />
+      )}
+
       {/* Back + Title + Export */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -631,11 +642,10 @@ export default function MetricsView({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {expensesWithReceipts.map(exp => (
               <div key={exp.id} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
-                <img
-                  src={exp.receiptImageUrl}
+                <ReceiptThumbnail
+                  b2Url={exp.receiptImageUrl!}
                   alt={exp.ref}
-                  className="w-full h-32 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => window.open(exp.receiptImageUrl, '_blank')}
+                  onClick={() => setPreviewUrl({ url: exp.receiptImageUrl!, label: exp.ref })}
                 />
                 <div className="p-2.5">
                   <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 font-mono">{exp.ref}</p>

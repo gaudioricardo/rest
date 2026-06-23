@@ -86,7 +86,7 @@ export default function NewQuoteScreen() {
       );
       await loadQuotes(userId);
       await loadClients(userId);
-      showToast(lang === 'pt' ? 'Orçamento criado' : 'Quote created', undefined, 'success');
+      showToast(lang === 'pt' ? 'Cotação criada' : 'Quote created', undefined, 'success');
       router.back();
     } catch (e) {
       showToast('Erro', String(e), 'error');

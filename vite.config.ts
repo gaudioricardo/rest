@@ -10,6 +10,44 @@ function b2UploadPlugin(
   b2BucketId: string,
   b2BucketName: string,
 ): Plugin {
+  async function b2Authorize(): Promise<{ authorizationToken: string; apiUrl: string; downloadUrl: string }> {
+    const creds = Buffer.from(`${b2KeyId}:${b2AppKey}`).toString('base64');
+    const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
+      headers: { Authorization: `Basic ${creds}` },
+    });
+    if (!authRes.ok) throw new Error(`B2 auth failed (${authRes.status})`);
+    return authRes.json();
+  }
+
+  async function handleView(req: IncomingMessage, res: ServerResponse) {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const key = url.searchParams.get('key');
+    if (!key) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing key param' }));
+      return;
+    }
+    if (!b2KeyId || !b2AppKey || !b2BucketName) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'B2 not configured — fill VITE_B2_* in .env' }));
+      return;
+    }
+    const auth = await b2Authorize();
+    const fileRes = await fetch(
+      `${auth.downloadUrl}/file/${b2BucketName}/${key}`,
+      { headers: { Authorization: auth.authorizationToken } },
+    );
+    if (!fileRes.ok) {
+      res.writeHead(fileRes.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File not found' }));
+      return;
+    }
+    const contentType = fileRes.headers.get('Content-Type') ?? 'image/jpeg';
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'private, max-age=3600' });
+    res.end(buffer);
+  }
+
   async function handleUpload(req: IncomingMessage, res: ServerResponse) {
     if (!b2KeyId || !b2AppKey || !b2BucketId) {
       res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -76,6 +114,19 @@ function b2UploadPlugin(
         if (req.method !== 'POST') { next(); return; }
         handleUpload(req, res).catch((err) => {
           console.error('[B2 Upload]', err);
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+        });
+      },
+    );
+    server.middlewares.use(
+      '/api/b2/view',
+      (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method !== 'GET') { next(); return; }
+        handleView(req, res).catch((err) => {
+          console.error('[B2 View]', err);
           if (!res.headersSent) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: String(err) }));

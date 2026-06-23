@@ -9,6 +9,7 @@ import { formatValue } from '../data';
 import { CreditCard, Plus, Search, HelpCircle, Check, Trash2, Paperclip } from 'lucide-react';
 import * as db from '../lib/db';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import ReceiptImageModal from './ReceiptImageModal';
 
 interface ExpensesViewProps {
   expenses: Expense[];
@@ -33,6 +34,7 @@ export default function ExpensesView({
 }: ExpensesViewProps) {
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<{ url: string; label: string } | null>(null);
 
   const handleDeleteExpense = async () => {
     if (!deleteTarget) return;
@@ -61,6 +63,14 @@ export default function ExpensesView({
 
   return (
     <>
+    {previewUrl && (
+      <ReceiptImageModal
+        b2Url={previewUrl.url}
+        label={previewUrl.label}
+        language={language}
+        onClose={() => setPreviewUrl(null)}
+      />
+    )}
     <DeleteConfirmModal
       isOpen={!!deleteTarget}
       onClose={() => setDeleteTarget(null)}
@@ -149,15 +159,13 @@ export default function ExpensesView({
                   </td>
                   <td className="px-6 py-4 text-center">
                     {exp.receiptImageUrl ? (
-                      <a
-                        href={exp.receiptImageUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        onClick={() => setPreviewUrl({ url: exp.receiptImageUrl!, label: exp.ref })}
                         title={language === 'en' ? 'View receipt image' : 'Ver comprovativo'}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-colors cursor-pointer"
                       >
                         <Paperclip size={13} />
-                      </a>
+                      </button>
                     ) : (
                       <span className="text-slate-250 dark:text-slate-700 text-[10px]">—</span>
                     )}

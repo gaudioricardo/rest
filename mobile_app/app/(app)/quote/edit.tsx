@@ -49,7 +49,7 @@ export default function EditQuoteScreen() {
   if (!quote) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
-        <Text style={{ color: palette.text, padding: Spacing.md }}>Orçamento não encontrado.</Text>
+        <Text style={{ color: palette.text, padding: Spacing.md }}>Cotaçãonão encontrado.</Text>
       </SafeAreaView>
     );
   }
@@ -98,7 +98,7 @@ export default function EditQuoteScreen() {
       );
       await loadQuotes(userId);
       showToast(
-        lang === 'pt' ? 'Orçamento actualizado' : 'Quote updated',
+        lang === 'pt' ? 'Cotação atualizada' : 'Quote updated',
         undefined,
         'success'
       );

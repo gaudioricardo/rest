@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,47 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { Colors, Spacing, Radius, FontSize } from '../../shared/theme';
 import { formatCurrency } from '../../shared/i18n';
 import { sharePdf } from '../../lib/pdf';
+import { fetchReceiptLocalUri } from '../../lib/b2';
+
+function AuthReceiptImage({ b2Url, onPress }: { b2Url: string; onPress: (localUri: string) => void }) {
+  const [localUri, setLocalUri] = useState<string | null>(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    console.log('[AuthReceiptImage] fetching:', b2Url);
+    fetchReceiptLocalUri(b2Url)
+      .then(uri => {
+        console.log('[AuthReceiptImage] OK:', uri);
+        if (!cancelled) setLocalUri(uri);
+      })
+      .catch((e: unknown) => {
+        console.error('[AuthReceiptImage] FAILED:', e instanceof Error ? e.message : e);
+        if (!cancelled) setErr(true);
+      });
+    return () => { cancelled = true; };
+  }, [b2Url]);
+
+  if (err) {
+    return (
+      <View style={{ width: 130, height: 90, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9' }}>
+        <Ionicons name="alert-circle-outline" size={22} color="#94a3b8" />
+      </View>
+    );
+  }
+  if (!localUri) {
+    return (
+      <View style={{ width: 130, height: 90, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9' }}>
+        <ActivityIndicator size="small" color="#94a3b8" />
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity onPress={() => onPress(localUri)} activeOpacity={0.8}>
+      <Image source={{ uri: localUri }} style={s.receiptImg} resizeMode="cover" />
+    </TouchableOpacity>
+  );
+}
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -582,19 +623,17 @@ ${expensesWithReceipts.length > 0 ? `
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.receiptScroll}>
               {expensesWithReceipts.map(exp => (
-                <TouchableOpacity
+                <View
                   key={exp.id}
                   style={[s.receiptThumb, { borderColor: palette.border }]}
-                  onPress={() => setPreviewImg(exp.receiptImageUrl!)}
-                  activeOpacity={0.8}
                 >
-                  <Image source={{ uri: exp.receiptImageUrl }} style={s.receiptImg} resizeMode="cover" />
+                  <AuthReceiptImage b2Url={exp.receiptImageUrl!} onPress={setPreviewImg} />
                   <View style={s.receiptInfo}>
                     <Text style={[s.receiptRef, { color: palette.text }]}>{exp.ref}</Text>
                     <Text style={[s.receiptMerchant, { color: palette.textMuted }]} numberOfLines={1}>{exp.merchant}</Text>
                     <Text style={[s.receiptAmt, { color: Colors.warning }]}>{formatCurrency(exp.amount)}</Text>
                   </View>
-                </TouchableOpacity>
+                </View>
               ))}
             </ScrollView>
           )}
