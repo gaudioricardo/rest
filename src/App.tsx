@@ -5,8 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { StockItem, Transaction, Invoice, Quote, Receipt, Expense, Contact, Language, Currency, ToastMessage, CompanySettings, DocumentItem, DebtClient, GeneralSale } from './types';
-import SidebarLeft from './components/SidebarLeft';
-import SidebarRight from './components/SidebarRight';
+import NavBar from './components/NavBar';
 import Header from './components/Header';
 import DashboardView from './components/DashboardView';
 import StockView from './components/StockView';
@@ -1115,14 +1114,31 @@ export default function App() {
   // ─── Main App ──────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 font-sans antialiased text-slate-800 dark:text-slate-100 transition-colors">
-      <div className="flex min-h-screen">
+      <div className="flex flex-col min-h-screen">
 
-        {/* Left Sidebar */}
-        <SidebarLeft
+        {/* Top header */}
+        <Header
+          language={language}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          onNewInvoice={() => setActiveModal('new_invoice')}
+          onNewQuote={() => setActiveModal('new_proposal')}
+          onNewReceipt={() => setActiveModal('new_receipt')}
+          onGenerateReport={handleTriggerReportGeneration}
+          onNewItem={() => setActiveModal('add_item')}
+          activeTab={activeTab}
+          userEmail={userEmail}
+          userName={userName}
+          onNavigateToSettings={() => navigateTo('settings')}
+        />
+
+        {/* Unified navigation bar */}
+        <NavBar
           activeTab={activeTab}
           setActiveTab={navigateTo}
           language={language}
           setLanguage={setLanguage}
+          hasNewUfsa={hasNewUfsa}
           onLogout={async () => {
             if (confirm(language === 'en' ? 'Are you sure you want to log out?' : 'Tem a certeza que deseja terminar sessão?')) {
               await supabase.auth.signOut();
@@ -1136,39 +1152,10 @@ export default function App() {
               );
             }
           }}
-          userName={userName}
-          hasNewUfsa={hasNewUfsa}
         />
 
-        {/* Right Sidebar */}
-        <SidebarRight
-          activeTab={activeTab}
-          setActiveTab={navigateTo}
-          language={language}
-          companyName={companySettings.companyName}
-        />
-
-        {/* Main Content Pane */}
-        <div className="flex-1 flex flex-col min-h-screen pb-24">
-
-          {/* Dynamic header */}
-          <Header
-            language={language}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            onNewInvoice={() => setActiveModal('new_invoice')}
-            onNewQuote={() => setActiveModal('new_proposal')}
-            onNewReceipt={() => setActiveModal('new_receipt')}
-            onGenerateReport={handleTriggerReportGeneration}
-            onNewItem={() => setActiveModal('add_item')}
-            activeTab={activeTab}
-            userEmail={userEmail}
-            userName={userName}
-            onNavigateToSettings={() => navigateTo('settings')}
-          />
-
-          {/* Central main page container */}
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 text-left h-full">
+        {/* Central main page container */}
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 text-left h-full">
             <div className="mx-auto w-full max-w-7xl">
 
             {activeTab === 'dashboard' && (
@@ -1383,7 +1370,6 @@ export default function App() {
             </div>
           </main>
         </div>
-      </div>
 
       {/* FIRST-SETUP WIZARD — rendered outside all tab/layout containers */}
       {isAuthenticated && !loading && !companySettings.setupComplete && (

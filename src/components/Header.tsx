@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Search, Settings, FileDown, Plus, FileText, Receipt } from 'lucide-react';
+import { Search, FileDown, Plus, FileText, Receipt } from 'lucide-react';
 import { Language } from '../types';
 import logoExtended from '../assets/Logo_extended.webp';
 import logoExtendedDark from '../assets/logo_extended_darkmode.webp';
@@ -181,14 +181,6 @@ export default function Header({
 
         {/* Separator */}
         <div className="hidden lg:block h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
-
-        {/* Settings Action Button */}
-        <button
-          onClick={() => onNavigateToSettings ? onNavigateToSettings() : undefined}
-          className="text-slate-500 hover:text-slate-800 dark:hover:text-white p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-smooth cursor-pointer"
-        >
-          <Settings size={18} />
-        </button>
 
         {/* Profile Card Executive Panel */}
         <div className="relative">
