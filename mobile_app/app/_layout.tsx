@@ -105,7 +105,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!userId && inApp) {
       router.replace('/(auth)/login');
     } else if (userId && inAuth) {
-      router.replace('/(app)/(tabs)/');
+      router.replace('/(app)/(tabs)');
     }
   }, [userId, authLoading, segments]);
 

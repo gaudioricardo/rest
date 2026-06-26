@@ -9,7 +9,7 @@ import {
   TrendingUp, TrendingDown, Clock, CheckCircle, XCircle,
   FileText, FileCode, Receipt, CreditCard, AlertCircle, Activity,
 } from 'lucide-react';
-import { Invoice, Quote, Receipt as ReceiptType, Expense, Language, CompanySettings } from '../types';
+import { Invoice, Quote, Receipt as ReceiptType, Expense, Language, CompanySettings, GeneralSale } from '../types';
 import { formatValue } from '../data';
 import { generateFilteredReportPDF } from '../lib/pdf';
 import { generateReportExcel } from '../lib/excel';
@@ -20,6 +20,7 @@ interface ReportsViewProps {
   quotes: Quote[];
   receipts: ReceiptType[];
   expenses: Expense[];
+  generalSales: GeneralSale[];
   language: Language;
   companySettings: CompanySettings;
 }
@@ -70,6 +71,7 @@ export default function ReportsView({
   quotes,
   receipts,
   expenses,
+  generalSales,
   language,
   companySettings,
 }: ReportsViewProps) {
@@ -111,20 +113,25 @@ export default function ReportsView({
     return `${fmt(from)} — ${fmt(to)}`;
   }, [from, to]);
 
-  const filteredInvoices = useMemo(() => invoices.filter(i => inRange(i.issueDate, from, to)), [invoices, from, to]);
-  const filteredQuotes   = useMemo(() => quotes.filter(q => inRange(q.issueDate, from, to)), [quotes, from, to]);
-  const filteredReceipts = useMemo(() => receipts.filter(r => inRange(r.paymentDate, from, to)), [receipts, from, to]);
-  const filteredExpenses = useMemo(() => expenses.filter(e => inRange(e.expenseDate, from, to)), [expenses, from, to]);
+  const filteredInvoices  = useMemo(() => invoices.filter(i => inRange(i.issueDate, from, to)), [invoices, from, to]);
+  const filteredQuotes    = useMemo(() => quotes.filter(q => inRange(q.issueDate, from, to)), [quotes, from, to]);
+  const filteredReceipts  = useMemo(() => receipts.filter(r => inRange(r.paymentDate, from, to)), [receipts, from, to]);
+  const filteredExpenses  = useMemo(() => expenses.filter(e => inRange(e.expenseDate, from, to)), [expenses, from, to]);
+  const filteredGenSales  = useMemo(() => generalSales.filter(s => {
+    const d = parseDate(s.saleDate);
+    return d ? d >= from && d <= to : false;
+  }), [generalSales, from, to]);
 
   // KPIs
-  const totalInvoiced = filteredInvoices.reduce((s, i) => s + i.amount, 0);
-  const totalPaid     = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
-  const totalPending  = filteredInvoices.filter(i => i.status === 'Pending').reduce((s, i) => s + i.amount, 0);
-  const totalOverdue  = filteredInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0);
-  const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
-  const totalReceipts = filteredReceipts.reduce((s, r) => s + r.amount, 0);
-  const totalQuotes   = filteredQuotes.reduce((s, q) => s + q.amount, 0);
-  const netResult     = totalPaid - totalExpenses;
+  const totalInvoiced  = filteredInvoices.reduce((s, i) => s + i.amount, 0);
+  const totalPaid      = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
+  const totalPending   = filteredInvoices.filter(i => i.status === 'Pending').reduce((s, i) => s + i.amount, 0);
+  const totalOverdue   = filteredInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0);
+  const totalExpenses  = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+  const totalReceipts  = filteredReceipts.reduce((s, r) => s + r.amount, 0);
+  const totalQuotes    = filteredQuotes.reduce((s, q) => s + q.amount, 0);
+  const totalGenSales  = filteredGenSales.reduce((s, sv) => s + sv.totalAmount, 0);
+  const netResult      = totalPaid + totalGenSales - totalExpenses;
 
   async function handlePDF() {
     setGeneratingPdf(true);
@@ -173,6 +180,13 @@ export default function ReportsView({
       icon: AlertCircle,
       color: 'text-red-600 dark:text-red-400',
       bg: 'bg-red-50 dark:bg-red-900/20',
+    },
+    {
+      label: t('General Sales', 'Vendas Gerais'),
+      value: formatValue(totalGenSales),
+      icon: CreditCard,
+      color: 'text-violet-600 dark:text-violet-400',
+      bg: 'bg-violet-50 dark:bg-violet-900/20',
     },
     {
       label: t('Total Expenses', 'Total Despesas'),
@@ -430,10 +444,11 @@ export default function ReportsView({
           <BarChart2 size={13} className="text-secondary" />
           {t('Accounting Balance', 'Saldo Contabilístico')} — {periodLabel}
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {[
             { label: t('Invoiced', 'Facturado'), val: totalInvoiced, color: 'text-blue-400' },
             { label: t('Received', 'Recebido'), val: totalPaid, color: 'text-emerald-400' },
+            { label: t('General Sales', 'Vendas Gerais'), val: totalGenSales, color: 'text-violet-400' },
             { label: t('Expenses', 'Despesas'), val: totalExpenses, color: 'text-orange-400' },
             { label: t('Net Result', 'Resultado Líquido'), val: netResult, color: netResult >= 0 ? 'text-emerald-400' : 'text-red-400' },
           ].map(item => (

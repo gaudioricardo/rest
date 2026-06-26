@@ -4,7 +4,7 @@
     "slug": "rest-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/Logo.png",
+    "icon": "./assets/app_icon.png",
     "scheme": "rest",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
@@ -19,7 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/Logo.png",
+        "foregroundImage": "./assets/app_icon.png",
         "backgroundColor": "#0c1c48"
       },
       "package": "com.grm.rest",
@@ -48,6 +48,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "9dc5cf98-6128-4ff0-b33c-e7393aeac0e4"
+      }
     }
   }
 }

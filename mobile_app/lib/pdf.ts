@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import type { Invoice, Quote, Receipt, Expense, CompanySettings, DocumentItem } from '../shared/types';
+import type { Invoice, Quote, Receipt, Expense, CompanySettings, DocumentItem, StockItem, GeneralSale } from '../shared/types';
 
 type TaxType = 'none' | 'ispc' | 'iva';
 
@@ -763,6 +763,243 @@ export const generateFilteredReportPdf = async (
 
   <div class="footer">Processado por Computador • ERP Código AT/MZ • ${settings.companyName} — NUIT: ${settings.nuit} • Gerado em: ${now.toLocaleString()}</div>
 </body></html>`;
+
+  const { uri } = await Print.printToFileAsync({ html, base64: false });
+  return uri;
+};
+
+// ─── LISTAGEM DE STOCK PDF ────────────────────────────────────────────────────
+
+export const generateStockPdf = async (
+  items: StockItem[],
+  settings: CompanySettings,
+  language: 'pt' | 'en'
+): Promise<string> => {
+  const isEn = language === 'en';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(isEn ? 'en-US' : 'pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const totalValue = items.reduce((s, i) => s + i.price * i.stockLevel, 0);
+  const inStockCount = items.filter(i => i.status === 'In Stock').length;
+  const lowCount = items.filter(i => i.status === 'Low Stock').length;
+  const outCount = items.filter(i => i.status === 'Out of Stock').length;
+
+  const rows = items.map(item => {
+    const pct = item.maxStock > 0 ? Math.min(100, Math.floor((item.stockLevel / item.maxStock) * 100)) : 0;
+    const barColor = pct === 0 ? '#dc2626' : pct <= 35 ? '#d97706' : '#16a34a';
+    const statusClass = item.status === 'In Stock' ? 'status-in' : item.status === 'Low Stock' ? 'status-low' : 'status-out';
+    return `
+      <tr>
+        <td>${item.name}</td>
+        <td style="font-family:monospace;font-size:9px;">${item.sku}</td>
+        <td>${isEn ? item.category : item.categoryPt}</td>
+        <td style="text-align:right;">${item.stockLevel}</td>
+        <td style="text-align:right;">${item.maxStock}</td>
+        <td style="text-align:right;">
+          <span style="display:inline-block;width:28px;height:5px;background:#e2e8f0;border-radius:3px;vertical-align:middle;margin-right:3px;overflow:hidden;">
+            <span style="display:block;width:${pct}%;height:100%;background:${barColor};border-radius:3px;"></span>
+          </span>${pct}%
+        </td>
+        <td style="text-align:right;">${fmtMT(item.price)}</td>
+        <td class="${statusClass}">${isEn ? item.status : item.statusPt}</td>
+      </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; padding: 24px; }
+    .header { display: flex; align-items: flex-start; gap: 12px; border-bottom: 2px solid #0c1c48; padding-bottom: 12px; margin-bottom: 14px; }
+    .company-name { font-size: 15px; font-weight: bold; text-transform: uppercase; color: #0c1c48; margin-bottom: 3px; }
+    .company-meta { font-size: 9px; color: #64748b; line-height: 1.6; }
+    .report-title { font-size: 17px; font-weight: bold; color: #0c1c48; text-transform: uppercase; margin-bottom: 3px; }
+    .report-date { font-size: 9px; color: #94a3b8; margin-bottom: 14px; }
+    .kpis { display: flex; gap: 6px; margin-bottom: 16px; }
+    .kpi { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 4px; text-align: center; }
+    .kpi-label { font-size: 7.5px; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+    .kpi-value { font-size: 13px; font-weight: bold; color: #0c1c48; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #0c1c48; }
+    th { color: #fff; font-size: 9px; text-align: left; padding: 8px 6px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.4px; }
+    td { padding: 7px 6px; font-size: 10px; border-bottom: 1px solid #f1f5f9; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .status-in { color: #16a34a; font-weight: bold; }
+    .status-low { color: #d97706; font-weight: bold; }
+    .status-out { color: #dc2626; font-weight: bold; }
+    .total-row td { font-weight: bold; background: #eff6ff !important; border-top: 2px solid #0c1c48; }
+    .footer { margin-top: 20px; font-size: 8px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" style="width:60px;height:auto;object-fit:contain;border-radius:4px;" />` : ''}
+    <div>
+      <div class="company-name">${settings.companyName || '—'}</div>
+      <div class="company-meta">
+        ${settings.address ? settings.address + (settings.city ? ', ' + settings.city : '') + '<br>' : ''}
+        NUIT: ${settings.nuit || '—'}${settings.phone ? ' · Tel: ' + settings.phone : ''}
+      </div>
+    </div>
+  </div>
+
+  <div class="report-title">${isEn ? 'Stock List' : 'Listagem de Stock'}</div>
+  <div class="report-date">${isEn ? 'Generated: ' : 'Gerado em: '}${dateStr} · ${items.length} ${isEn ? 'items' : 'artigos'}</div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Total' : 'Total'}</div>
+      <div class="kpi-value">${items.length}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'In Stock' : 'Em Stock'}</div>
+      <div class="kpi-value" style="color:#16a34a;">${inStockCount}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Low Stock' : 'Baixo'}</div>
+      <div class="kpi-value" style="color:#d97706;">${lowCount}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Out of Stock' : 'Sem Stock'}</div>
+      <div class="kpi-value" style="color:#dc2626;">${outCount}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Total Value' : 'Valor Total'}</div>
+      <div class="kpi-value" style="font-size:10px;">${fmtMT(totalValue)}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>${isEn ? 'Name' : 'Nome'}</th>
+        <th>SKU</th>
+        <th>${isEn ? 'Category' : 'Categoria'}</th>
+        <th style="text-align:right;">${isEn ? 'Stock' : 'Stock'}</th>
+        <th style="text-align:right;">${isEn ? 'Max' : 'Máx.'}</th>
+        <th style="text-align:right;">%</th>
+        <th style="text-align:right;">${isEn ? 'Unit Price' : 'Preço Unit.'}</th>
+        <th>${isEn ? 'Status' : 'Estado'}</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr class="total-row">
+        <td colspan="6">${isEn ? 'TOTAL' : 'TOTAL'} (${items.length} ${isEn ? 'items' : 'artigos'})</td>
+        <td style="text-align:right;">${fmtMT(totalValue)}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">${settings.companyName} · NUIT: ${settings.nuit} · ${isEn ? 'Generated by' : 'Gerado por'} Rest ERP · ${now.toLocaleString()}</div>
+</body>
+</html>`;
+
+  const { uri } = await Print.printToFileAsync({ html, base64: false });
+  return uri;
+};
+
+// ─── GENERAL SALES PDF ───────────────────────────────────────────────────────
+
+export const generateGeneralSalesPdf = async (
+  sales: GeneralSale[],
+  settings: CompanySettings,
+  language: 'pt' | 'en'
+): Promise<string> => {
+  const isEn = language === 'en';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(isEn ? 'en-US' : 'pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const totalRevenue = sales.reduce((s, sv) => s + sv.totalAmount, 0);
+  const totalQty = sales.reduce((s, sv) => s + sv.quantity, 0);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayTotal = sales.filter(sv => sv.saleDate === todayStr).reduce((s, sv) => s + sv.totalAmount, 0);
+
+  const rows = sales.map(sv => `
+    <tr>
+      <td style="font-family:monospace;font-size:9px;">${sv.ref}</td>
+      <td>${sv.productName}</td>
+      <td style="font-family:monospace;font-size:9px;">${sv.sku || '—'}</td>
+      <td style="text-align:right;">${sv.quantity}</td>
+      <td style="text-align:right;">${fmtMT(sv.unitPrice)}</td>
+      <td style="text-align:right;font-weight:bold;">${fmtMT(sv.totalAmount)}</td>
+      <td style="text-align:center;font-size:9px;">${sv.paymentMethod}</td>
+      <td style="text-align:center;">${isEn ? sv.date : sv.datePt}</td>
+      <td style="font-size:9px;color:#64748b;">${sv.notes || '—'}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; padding: 24px; }
+    .header { display: flex; align-items: flex-start; gap: 12px; border-bottom: 2px solid #0c1c48; padding-bottom: 12px; margin-bottom: 14px; }
+    .company-name { font-size: 15px; font-weight: bold; text-transform: uppercase; color: #0c1c48; margin-bottom: 3px; }
+    .company-meta { font-size: 9px; color: #64748b; line-height: 1.6; }
+    .report-title { font-size: 17px; font-weight: bold; color: #0c1c48; text-transform: uppercase; margin-bottom: 3px; }
+    .report-date { font-size: 9px; color: #94a3b8; margin-bottom: 14px; }
+    .kpis { display: flex; gap: 6px; margin-bottom: 16px; }
+    .kpi { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 4px; text-align: center; }
+    .kpi-label { font-size: 7.5px; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+    .kpi-value { font-size: 12px; font-weight: bold; color: #0c1c48; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #0c1c48; }
+    th { color: #fff; font-size: 9px; text-align: left; padding: 8px 6px; font-weight: bold; text-transform: uppercase; }
+    td { padding: 7px 6px; font-size: 10px; border-bottom: 1px solid #f1f5f9; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .total-row td { font-weight: bold; background: #0c1c48 !important; color: #fff; }
+    .footer { margin-top: 20px; font-size: 8px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" style="width:60px;height:auto;object-fit:contain;border-radius:4px;" />` : ''}
+    <div>
+      <div class="company-name">${settings.companyName || '—'}</div>
+      <div class="company-meta">NUIT: ${settings.nuit || '—'}${settings.phone ? ' · Tel: ' + settings.phone : ''}</div>
+    </div>
+  </div>
+  <div class="report-title">${isEn ? 'General Sales' : 'Vendas Gerais'}</div>
+  <div class="report-date">${isEn ? 'Generated: ' : 'Gerado em: '}${dateStr} · ${sales.length} ${isEn ? 'sales' : 'vendas'}</div>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">${isEn ? 'Total Sales' : 'Total Vendas'}</div><div class="kpi-value">${sales.length}</div></div>
+    <div class="kpi"><div class="kpi-label">${isEn ? 'Items' : 'Itens'}</div><div class="kpi-value">${totalQty}</div></div>
+    <div class="kpi"><div class="kpi-label">${isEn ? 'Revenue' : 'Receita'}</div><div class="kpi-value" style="font-size:10px;">${fmtMT(totalRevenue)}</div></div>
+    <div class="kpi"><div class="kpi-label">${isEn ? 'Today' : 'Hoje'}</div><div class="kpi-value" style="font-size:10px;">${fmtMT(todayTotal)}</div></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Ref</th>
+        <th>${isEn ? 'Product' : 'Produto'}</th>
+        <th>SKU</th>
+        <th style="text-align:right;">${isEn ? 'Qty' : 'Qtd'}</th>
+        <th style="text-align:right;">${isEn ? 'Unit Price' : 'Preço Unit.'}</th>
+        <th style="text-align:right;">Total</th>
+        <th style="text-align:center;">${isEn ? 'Payment' : 'Pagamento'}</th>
+        <th style="text-align:center;">${isEn ? 'Date' : 'Data'}</th>
+        <th>${isEn ? 'Notes' : 'Notas'}</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr class="total-row">
+        <td colspan="3">${isEn ? 'TOTAL' : 'TOTAL'}</td>
+        <td style="text-align:right;">${totalQty}</td>
+        <td></td>
+        <td style="text-align:right;">${fmtMT(totalRevenue)}</td>
+        <td></td><td></td><td></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="footer">${settings.companyName} · ${isEn ? 'Generated by' : 'Gerado por'} Rest ERP · ${now.toLocaleString()}</div>
+</body>
+</html>`;
 
   const { uri } = await Print.printToFileAsync({ html, base64: false });
   return uri;

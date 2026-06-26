@@ -11,6 +11,7 @@ import {
   Settings,
   UserRound,
   BarChart2,
+  ShoppingCart,
 } from 'lucide-react';
 import { Language } from '../types';
 
@@ -26,6 +27,7 @@ const mainItems = [
   { id: 'quotes', label: 'Quotes', labelPt: 'Cotações', icon: FileCode },
   { id: 'invoices', label: 'Invoices', labelPt: 'Facturas', icon: FileText },
   { id: 'receipts', label: 'Receipts', labelPt: 'Recibos', icon: Receipt },
+  { id: 'vendas', label: 'Sales', labelPt: 'Vendas', icon: ShoppingCart },
   { id: 'clientes', label: 'Clients', labelPt: 'Clientes', icon: UserRound },
   { id: 'reports', label: 'Reports', labelPt: 'Relatórios', icon: BarChart2 },
 ];

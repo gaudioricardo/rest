@@ -4,7 +4,7 @@
  */
 
 import * as XLSX from 'xlsx';
-import { Invoice, Quote, Receipt, Expense, CompanySettings } from '../types';
+import { Invoice, Quote, Receipt, Expense, CompanySettings, GeneralSale, Language } from '../types';
 import { formatValue } from '../data';
 
 function fmtDate(d: string | undefined): string {
@@ -134,4 +134,54 @@ export function generateReportExcel(
   // ─── Write & Download ─────────────────────────────────────────────────────
   const dateStr = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `Relatorio_${dateStr}.xlsx`);
+}
+
+export function generateGeneralSalesExcel(
+  sales: GeneralSale[],
+  language: Language,
+  settings: CompanySettings,
+  dateFrom?: string,
+  dateTo?: string
+): void {
+  const isEn = language === 'en';
+  const wb = XLSX.utils.book_new();
+  const now = new Date();
+
+  const totalRevenue = sales.reduce((s, sv) => s + sv.totalAmount, 0);
+  const totalQty = sales.reduce((s, sv) => s + sv.quantity, 0);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayTotal = sales.filter(sv => sv.saleDate === todayStr).reduce((s, sv) => s + sv.totalAmount, 0);
+
+  const period = (dateFrom || dateTo) ? `${dateFrom || '—'} → ${dateTo || '—'}` : now.toLocaleDateString('pt-MZ');
+
+  const summaryData = [
+    [isEn ? 'GENERAL SALES SUMMARY' : 'RESUMO DE VENDAS GERAIS', ''],
+    [isEn ? 'Company:' : 'Empresa:', settings.companyName || '—'],
+    [isEn ? 'NUIT:' : 'NUIT:', settings.nuit || '—'],
+    [isEn ? 'Period:' : 'Período:', period],
+    [''],
+    [isEn ? 'Total Sales' : 'Total Vendas', sales.length],
+    [isEn ? 'Items Sold' : 'Itens Vendidos', totalQty],
+    [isEn ? 'Total Revenue (MT)' : 'Receita Total (MT)', totalRevenue],
+    [isEn ? "Today's Sales (MT)" : 'Vendas Hoje (MT)', todayTotal],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  XLSX.utils.book_append_sheet(wb, wsSummary, isEn ? 'Summary' : 'Resumo');
+
+  const salesHead = [isEn
+    ? ['Ref', 'Product', 'SKU', 'Quantity', 'Unit Price (MT)', 'Total (MT)', 'Payment', 'Date', 'Notes']
+    : ['Ref', 'Produto', 'SKU', 'Quantidade', 'Preço Unit. (MT)', 'Total (MT)', 'Pagamento', 'Data', 'Notas']
+  ];
+  const salesRows: (string | number)[][] = sales.map(sv => [
+    sv.ref, sv.productName, sv.sku || '', sv.quantity,
+    sv.unitPrice, sv.totalAmount,
+    sv.paymentMethod,
+    isEn ? sv.date : sv.datePt,
+    sv.notes || '',
+  ]);
+  salesRows.push(['', isEn ? `TOTAL (${sales.length})` : `TOTAL (${sales.length})`, '', totalQty, '', totalRevenue, '', '', '']);
+  const wsSales = XLSX.utils.aoa_to_sheet([...salesHead, ...salesRows]);
+  XLSX.utils.book_append_sheet(wb, wsSales, isEn ? 'Sales' : 'Vendas');
+
+  XLSX.writeFile(wb, `Vendas_Gerais_${now.toISOString().slice(0, 10)}.xlsx`);
 }

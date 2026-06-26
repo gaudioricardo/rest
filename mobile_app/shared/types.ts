@@ -112,6 +112,26 @@ export interface Contact {
   avatarColor: string;
 }
 
+export type PaymentMethod = 'Físico' | 'M-Pesa' | 'E-mola' | 'Banco';
+
+export interface GeneralSale {
+  id: string;
+  seqNumber: number;
+  ref: string;
+  productId?: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  saleDate: string;
+  date: string;
+  datePt: string;
+  paymentMethod: PaymentMethod;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface DebtClient {
   id: string;
   fullName: string;

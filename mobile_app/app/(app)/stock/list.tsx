@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,16 +12,18 @@ import { Badge, getStockVariant } from '../../../components/ui/Badge';
 import { DeleteModal } from '../../../components/ui/DeleteModal';
 import { useToast } from '../../../components/ui/ToastContainer';
 import { deleteStockItem } from '../../../lib/db';
+import { generateStockPdf, sharePdf } from '../../../lib/pdf';
 
 export default function StockListScreen() {
   const router = useRouter();
   const { showToast } = useToast();
-  const { language, darkMode } = useSettingsStore();
+  const { language, darkMode, company } = useSettingsStore();
   const { userId } = useAuthStore();
   const { stockItems, loadStock } = useDataStore();
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const palette = darkMode ? Colors.dark : Colors.light;
   const lang = language;
@@ -29,6 +31,20 @@ export default function StockListScreen() {
   const filtered = stockItems.filter(
     (s) => s.name.toLowerCase().includes(search.toLowerCase()) || s.sku.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleExportPdf = async () => {
+    if (!company || exporting) return;
+    setExporting(true);
+    try {
+      const uri = await generateStockPdf(filtered, company, language);
+      const filename = `Stock_${new Date().toISOString().slice(0, 10)}.pdf`;
+      await sharePdf(uri, filename);
+    } catch {
+      showToast(language === 'pt' ? 'Erro ao gerar PDF' : 'Failed to generate PDF', '', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteId || !userId) return;
@@ -48,12 +64,23 @@ export default function StockListScreen() {
           <Ionicons name="arrow-back" size={22} color={palette.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: palette.text }]}>{tr(lang, 'stock')}</Text>
-        <TouchableOpacity
-          style={[styles.newBtn, { backgroundColor: Colors.primary }]}
-          onPress={() => router.push('/(app)/stock/new')}
-        >
-          <Ionicons name="add" size={18} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={handleExportPdf}
+            disabled={exporting}
+            style={[styles.iconBtn, { backgroundColor: palette.surface, borderColor: palette.border }]}
+          >
+            {exporting
+              ? <ActivityIndicator size={14} color={palette.textMuted} />
+              : <Ionicons name="share-outline" size={17} color={palette.accent} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.newBtn, { backgroundColor: Colors.primary }]}
+            onPress={() => router.push('/(app)/stock/new')}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={[styles.searchBar, { backgroundColor: palette.surface, borderBottomColor: palette.border }]}>
@@ -111,6 +138,7 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: FontSize.xl, fontWeight: '700' },
   newBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  iconBtn: { width: 36, height: 36, borderRadius: 10, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: Spacing.md, paddingVertical: 10, borderBottomWidth: 1,

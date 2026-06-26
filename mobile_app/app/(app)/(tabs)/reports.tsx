@@ -94,7 +94,7 @@ export default function ReportsScreen() {
   const router = useRouter();
   const { language, darkMode, company } = useSettingsStore();
   const companySettings = company ?? { companyName: '', nuit: '', address: '', city: '', phone: '', email: '', bankAccounts: [], mobileContacts: [], setupComplete: false };
-  const { invoices, quotes, receipts, expenses } = useDataStore();
+  const { invoices, quotes, receipts, expenses, generalSales } = useDataStore();
   const lang = language;
   const palette = darkMode ? Colors.dark : Colors.light;
 
@@ -137,6 +137,7 @@ export default function ReportsScreen() {
   const filteredQuotes   = useMemo(() => quotes.filter(q => inRange(q.issueDate, from, to)), [quotes, from, to]);
   const filteredReceipts = useMemo(() => receipts.filter(r => inRange(r.paymentDate, from, to)), [receipts, from, to]);
   const filteredExpenses = useMemo(() => expenses.filter(e => inRange(e.expenseDate, from, to)), [expenses, from, to]);
+  const filteredGenSales = useMemo(() => generalSales.filter(s => inRange(s.saleDate, from, to)), [generalSales, from, to]);
 
   const totalInvoiced = filteredInvoices.reduce((s, i) => s + i.amount, 0);
   const totalPaid     = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
@@ -145,7 +146,8 @@ export default function ReportsScreen() {
   const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
   const totalReceipts = filteredReceipts.reduce((s, r) => s + r.amount, 0);
   const totalQuotes   = filteredQuotes.reduce((s, q) => s + q.amount, 0);
-  const netResult     = totalPaid - totalExpenses;
+  const totalGenSales = filteredGenSales.reduce((s, sv) => s + sv.totalAmount, 0);
+  const netResult     = totalPaid + totalGenSales - totalExpenses;
 
   async function handlePdf() {
     setLoadingPdf(true);
@@ -196,6 +198,7 @@ export default function ReportsScreen() {
     { label: lang === 'pt' ? 'Vencido' : 'Overdue', value: formatCurrency(totalOverdue), color: Colors.error },
     { label: lang === 'pt' ? 'Cotações' : 'Quotes', value: formatCurrency(totalQuotes), color: Colors.secondary },
     { label: lang === 'pt' ? 'Recibos' : 'Receipts', value: formatCurrency(totalReceipts), color: '#059669' },
+    { label: lang === 'pt' ? 'Vendas Gerais' : 'Gen. Sales', value: formatCurrency(totalGenSales), color: '#7c3aed' },
     { label: lang === 'pt' ? 'Despesas' : 'Expenses', value: formatCurrency(totalExpenses), color: '#ea580c' },
     { label: lang === 'pt' ? 'Resultado' : 'Net', value: formatCurrency(netResult), color: netResult >= 0 ? Colors.success : Colors.error },
   ];
@@ -404,6 +407,7 @@ export default function ReportsScreen() {
             {[
               { label: lang === 'pt' ? 'Facturado' : 'Invoiced', val: totalInvoiced, color: '#93c5fd' },
               { label: lang === 'pt' ? 'Recebido' : 'Received', val: totalPaid, color: '#86efac' },
+              { label: lang === 'pt' ? 'Vendas Gerais' : 'Gen. Sales', val: totalGenSales, color: '#c4b5fd' },
               { label: lang === 'pt' ? 'Despesas' : 'Expenses', val: totalExpenses, color: '#fca5a5' },
               { label: lang === 'pt' ? 'Resultado' : 'Net', val: netResult, color: netResult >= 0 ? '#86efac' : '#fca5a5' },
             ].map(item => (

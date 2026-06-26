@@ -16,6 +16,7 @@ export interface StockItem {
   statusPt: 'Em Stock' | 'Stock Baixo' | 'Sem Stock';
   warehouse: string;
   warehousePt: string;
+  createdAt?: string;
 }
 
 export interface Transaction {
@@ -172,6 +173,26 @@ export interface CompanySettings {
   mobileContacts: MobileContact[];
   setupComplete: boolean;
   secondaryCompany?: SecondaryCompany | null;
+}
+
+export type PaymentMethod = 'Físico' | 'M-Pesa' | 'E-mola' | 'Banco';
+
+export interface GeneralSale {
+  id: string;
+  seqNumber: number;
+  ref: string;
+  productId?: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  saleDate: string;
+  date: string;
+  datePt: string;
+  paymentMethod: PaymentMethod;
+  notes?: string;
+  createdAt: string;
 }
 
 export interface ToastMessage {

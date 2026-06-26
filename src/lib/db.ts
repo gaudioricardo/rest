@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabase';
-import { Invoice, Quote, Receipt, Expense, StockItem, Contact, DocumentItem, CompanySettings, BankAccount, MobileContact, DebtClient, SecondaryCompany } from '../types';
+import { Invoice, Quote, Receipt, Expense, StockItem, Contact, DocumentItem, CompanySettings, BankAccount, MobileContact, DebtClient, SecondaryCompany, GeneralSale } from '../types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -179,6 +179,7 @@ export function mapStockItem(row: Record<string, unknown>): StockItem {
     statusPt,
     warehouse: row.warehouse as string,
     warehousePt: row.warehouse_pt as string,
+    createdAt: (row.created_at as string | undefined) ?? undefined,
   };
 }
 
@@ -547,6 +548,105 @@ export async function updateStockLevel(id: string, stockLevel: number): Promise<
 export async function deleteStockItem(id: string): Promise<boolean> {
   try {
     const { error } = await supabase.from('stock_items').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ─── GeneralSale CRUD ─────────────────────────────────────────────────────────
+
+export function mapGeneralSale(row: Record<string, unknown>): GeneralSale {
+  const seqNumber = row.seq_number as number;
+  const saleDate = (row.sale_date as string) ?? todayIso();
+  return {
+    id: row.id as string,
+    seqNumber,
+    ref: formatDocNumber('VND', seqNumber),
+    productId: (row.product_id as string | undefined) ?? undefined,
+    productName: row.product_name as string,
+    sku: (row.sku as string) ?? '',
+    quantity: row.quantity as number,
+    unitPrice: parseFloat(String(row.unit_price)),
+    totalAmount: parseFloat(String(row.total_amount)),
+    saleDate,
+    date: formatDateEn(saleDate),
+    datePt: formatDatePt(saleDate),
+    paymentMethod: ((row.payment_method as string | undefined) ?? 'Físico') as import('../types').PaymentMethod,
+    notes: (row.notes as string | undefined) ?? undefined,
+    createdAt: (row.created_at as string) ?? '',
+  };
+}
+
+export async function fetchGeneralSales(userId: string): Promise<GeneralSale[]> {
+  try {
+    const { data, error } = await supabase
+      .from('general_sales')
+      .select('*')
+      .eq('user_id', userId)
+      .order('sale_date', { ascending: false })
+      .order('seq_number', { ascending: false });
+    if (error || !data) return [];
+    return data.map(mapGeneralSale);
+  } catch {
+    return [];
+  }
+}
+
+export async function createGeneralSale(payload: {
+  userId: string;
+  productId?: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  saleDate: string;
+  paymentMethod: import('../types').PaymentMethod;
+  notes?: string;
+}): Promise<GeneralSale | null> {
+  try {
+    const totalAmount = payload.quantity * payload.unitPrice;
+    const { data, error } = await supabase
+      .from('general_sales')
+      .insert({
+        user_id: payload.userId,
+        product_id: payload.productId ?? null,
+        product_name: payload.productName,
+        sku: payload.sku,
+        quantity: payload.quantity,
+        unit_price: payload.unitPrice,
+        total_amount: totalAmount,
+        sale_date: payload.saleDate,
+        payment_method: payload.paymentMethod,
+        notes: payload.notes ?? null,
+      })
+      .select()
+      .single();
+    if (error || !data) return null;
+
+    if (payload.productId) {
+      const { data: stock } = await supabase
+        .from('stock_items')
+        .select('stock_level')
+        .eq('id', payload.productId)
+        .single();
+      if (stock) {
+        await supabase
+          .from('stock_items')
+          .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - payload.quantity) })
+          .eq('id', payload.productId);
+      }
+    }
+
+    return mapGeneralSale(data);
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteGeneralSale(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('general_sales').delete().eq('id', id);
     return !error;
   } catch {
     return false;

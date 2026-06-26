@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { StockItem, Transaction, Invoice, Quote, Receipt, Expense, Contact, Language, Currency, ToastMessage, CompanySettings, DocumentItem, DebtClient } from './types';
+import { StockItem, Transaction, Invoice, Quote, Receipt, Expense, Contact, Language, Currency, ToastMessage, CompanySettings, DocumentItem, DebtClient, GeneralSale } from './types';
 import SidebarLeft from './components/SidebarLeft';
 import SidebarRight from './components/SidebarRight';
 import Header from './components/Header';
@@ -17,6 +17,7 @@ import ReceiptsView from './components/ReceiptsView';
 import ExpensesView from './components/ExpensesView';
 import ContactsView from './components/ContactsView';
 import ClientesView from './components/ClientesView';
+import VendasView from './components/VendasView';
 import AuthView from './components/AuthView';
 import SettingsView from './components/SettingsView';
 import ReportsView from './components/ReportsView';
@@ -72,6 +73,7 @@ export default function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [debtClients, setDebtClients] = useState<DebtClient[]>([]);
+  const [generalSales, setGeneralSales] = useState<GeneralSale[]>([]);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -206,7 +208,7 @@ export default function App() {
     if (loadedRef.current === userId) return;
     loadedRef.current = userId;
 
-    const [invs, qts, rcs, exps, stock, ctcs, dcs, settingsData] = await Promise.all([
+    const [invs, qts, rcs, exps, stock, ctcs, dcs, genSales, settingsData] = await Promise.all([
       db.fetchInvoices(userId),
       db.fetchQuotes(userId),
       db.fetchReceipts(userId),
@@ -214,6 +216,7 @@ export default function App() {
       db.fetchStockItems(userId),
       db.fetchContacts(userId),
       db.fetchDebtClients(userId),
+      db.fetchGeneralSales(userId),
       db.fetchCompanySettings(userId),
     ]);
 
@@ -225,6 +228,7 @@ export default function App() {
     setStockItems(stock);
     setContacts(ctcs);
     setDebtClients(dcs);
+    setGeneralSales(genSales);
 
     if (settingsData) {
       setCompanySettings(settingsData);
@@ -256,6 +260,7 @@ export default function App() {
     setStockItems([]);
     setContacts([]);
     setDebtClients([]);
+    setGeneralSales([]);
     setCurrentUserId(null);
     setCompanySettings({
       companyName: '', nuit: '', address: '', city: '', phone: '', email: '',
@@ -622,8 +627,8 @@ export default function App() {
     }
     if (!currentUserId) return;
 
-    const warehouseStr = formStockWarehouse === 'NYC' ? 'Primary Hub (NYC)' : 'West Coast Annex';
-    const warehouseStrPt = formStockWarehouse === 'NYC' ? 'Hub Principal (Maputo)' : 'Anexo da Beira';
+    const warehouseStr = 'Primary Hub (Maputo)';
+    const warehouseStrPt = 'Hub Principal (Maputo)';
     const categoryPtMap: Record<string, string> = {
       Hardware: 'Hardware',
       Accessories: 'Acessórios',
@@ -892,6 +897,66 @@ export default function App() {
     }
   };
 
+  // Form state – General Sale
+  const [formSaleProductId, setFormSaleProductId] = useState('');
+  const [formSaleProductName, setFormSaleProductName] = useState('');
+  const [formSaleSku, setFormSaleSku] = useState('');
+  const [formSaleQuantity, setFormSaleQuantity] = useState('1');
+  const [formSaleUnitPrice, setFormSaleUnitPrice] = useState('');
+  const [formSalePaymentMethod, setFormSalePaymentMethod] = useState<'Físico' | 'M-Pesa' | 'E-mola' | 'Banco'>('Físico');
+  const [formSaleNotes, setFormSaleNotes] = useState('');
+  const [formSaleDate, setFormSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const handleCreateSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formSaleProductName.trim() || !formSaleUnitPrice.trim()) {
+      triggerToast('Erro', 'Erro', 'Preencha produto e preço.', 'Preencha produto e preço.', 'error');
+      return;
+    }
+    const qty = parseInt(formSaleQuantity) || 1;
+    const price = parseFloat(formSaleUnitPrice);
+    if (isNaN(price) || price <= 0) return;
+    if (!currentUserId) return;
+
+    const newSale = await db.createGeneralSale({
+      userId: currentUserId,
+      productId: formSaleProductId || undefined,
+      productName: formSaleProductName.trim(),
+      sku: formSaleSku.trim(),
+      quantity: qty,
+      unitPrice: price,
+      saleDate: formSaleDate || new Date().toISOString().slice(0, 10),
+      paymentMethod: formSalePaymentMethod,
+      notes: formSaleNotes.trim() || undefined,
+    });
+
+    if (newSale) {
+      setGeneralSales(prev => [newSale, ...prev]);
+      if (formSaleProductId) {
+        const updatedStock = await db.fetchStockItems(currentUserId);
+        setStockItems(updatedStock);
+      }
+      setActiveModal(null);
+      setFormSaleProductId('');
+      setFormSaleProductName('');
+      setFormSaleSku('');
+      setFormSaleQuantity('1');
+      setFormSaleUnitPrice('');
+      setFormSalePaymentMethod('Físico');
+      setFormSaleNotes('');
+      setFormSaleDate(new Date().toISOString().slice(0, 10));
+      triggerToast('Venda Registada', 'Venda Registada', 'Venda registada com sucesso.', 'Venda registada com sucesso.', 'success');
+    }
+  };
+
+  const handleDeleteSale = async (id: string) => {
+    const ok = await db.deleteGeneralSale(id);
+    if (ok) {
+      setGeneralSales(prev => prev.filter(s => s.id !== id));
+      triggerToast('Removido', 'Removido', 'Venda eliminada.', 'Venda eliminada.', 'info');
+    }
+  };
+
   const handleCreateReceiptManual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formReceiptClient.trim() || !formReceiptAmount.trim()) {
@@ -1111,12 +1176,14 @@ export default function App() {
                 transactions={transactions}
                 stockItems={stockItems}
                 invoices={invoices}
+                generalSales={generalSales}
                 language={language}
                 currency={currency}
                 onNavigate={navigateTo}
                 onNewInvoice={() => setActiveModal('new_invoice')}
                 onAddStock={() => setActiveModal('add_item')}
                 onGenerateReport={handleTriggerReportGeneration}
+                onNavigateToVendas={() => navigateTo('vendas')}
               />
             )}
 
@@ -1129,6 +1196,7 @@ export default function App() {
                 onAddItem={() => setActiveModal('add_item')}
                 triggerToast={triggerToast}
                 searchQuery={searchQuery}
+                companySettings={companySettings}
               />
             )}
 
@@ -1207,6 +1275,19 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'vendas' && (
+              <VendasView
+                sales={generalSales}
+                stockItems={stockItems}
+                language={language}
+                currency={currency}
+                companySettings={companySettings}
+                onNewSale={() => setActiveModal('new_sale')}
+                onDeleteSale={handleDeleteSale}
+                searchQuery={searchQuery}
+              />
+            )}
+
             {activeTab === 'ufsa' && (
               <UfsaView
                 language={language}
@@ -1220,6 +1301,7 @@ export default function App() {
                 quotes={quotes}
                 receipts={receipts}
                 expenses={expenses}
+                generalSales={generalSales}
                 language={language}
                 companySettings={companySettings}
               />
@@ -1374,6 +1456,7 @@ export default function App() {
                 {activeModal === 'generate_report' && (language === 'en' ? 'Consolidating Financial Aggregates' : 'Consolidando Relatórios Globais')}
                 {activeModal === 'new_debt_client' && (language === 'en' ? 'Add Pending Client' : 'Adicionar Cliente Pendente')}
                 {activeModal === 'new_receipt' && (language === 'en' ? 'Issue New Receipt' : 'Emitir Novo Recibo')}
+                {activeModal === 'new_sale' && (language === 'en' ? 'Register General Sale' : 'Registar Venda Avulsa')}
               </h3>
 
               {activeModal !== 'generate_report' && (
@@ -1637,32 +1720,18 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Category' : 'Categoria'}</label>
-                      <select
-                        value={formStockCategory}
-                        onChange={(e) => setFormStockCategory(e.target.value)}
-                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
-                      >
-                        <option value="Hardware">{language === 'en' ? 'Hardware' : 'Hardware Componentes'}</option>
-                        <option value="Accessories">{language === 'en' ? 'Accessories' : 'Acessórios'}</option>
-                        <option value="Structural">{language === 'en' ? 'Structural' : 'Estrutural'}</option>
-                        <option value="Infrastructure">{language === 'en' ? 'Infrastructure' : 'Infraestrutura'}</option>
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Warehouse Hub' : 'Armazém de Entrega'}</label>
-                      <select
-                        value={formStockWarehouse}
-                        onChange={(e) => setFormStockWarehouse(e.target.value)}
-                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
-                      >
-                        <option value="NYC">{language === 'en' ? 'Primary Hub (NYC)' : 'Hub Principal (Maputo)'}</option>
-                        <option value="Beira">{language === 'en' ? 'West Coast Annex' : 'Anexo da Beira'}</option>
-                      </select>
-                    </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Category' : 'Categoria'}</label>
+                    <select
+                      value={formStockCategory}
+                      onChange={(e) => setFormStockCategory(e.target.value)}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
+                    >
+                      <option value="Hardware">{language === 'en' ? 'Hardware' : 'Hardware Componentes'}</option>
+                      <option value="Accessories">{language === 'en' ? 'Accessories' : 'Acessórios'}</option>
+                      <option value="Structural">{language === 'en' ? 'Structural' : 'Estrutural'}</option>
+                      <option value="Infrastructure">{language === 'en' ? 'Infrastructure' : 'Infraestrutura'}</option>
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
@@ -2392,6 +2461,116 @@ export default function App() {
                       className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg shadow-md transition-all cursor-pointer"
                     >
                       {language === 'en' ? 'Issue Receipt' : 'Emitir Recibo'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* I. New General Sale Form */}
+              {activeModal === 'new_sale' && (
+                <form onSubmit={handleCreateSale} className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      {language === 'en' ? 'Select Stock Product (optional)' : 'Seleccionar Produto do Stock (opcional)'}
+                    </label>
+                    <select
+                      value={formSaleProductId}
+                      onChange={(e) => {
+                        const item = stockItems.find(s => s.id === e.target.value);
+                        setFormSaleProductId(e.target.value);
+                        if (item) {
+                          setFormSaleProductName(item.name);
+                          setFormSaleSku(item.sku);
+                          setFormSaleUnitPrice(String(item.price));
+                        } else {
+                          setFormSaleProductName('');
+                          setFormSaleSku('');
+                          setFormSaleUnitPrice('');
+                        }
+                      }}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold"
+                    >
+                      <option value="">{language === 'en' ? '— Free entry (no stock link) —' : '— Entrada livre (sem ligação ao stock) —'}</option>
+                      {stockItems.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.sku}) — Stock: {s.stockLevel}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {language === 'en' ? 'Product Name *' : 'Nome do Produto *'}
+                      </label>
+                      <input type="text" required value={formSaleProductName} onChange={(e) => setFormSaleProductName(e.target.value)}
+                        placeholder="Produto..." className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100" />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SKU</label>
+                      <input type="text" value={formSaleSku} onChange={(e) => setFormSaleSku(e.target.value)}
+                        placeholder="SKU-001" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Quantity *' : 'Quantidade *'}</label>
+                      <input type="number" required min="1" value={formSaleQuantity} onChange={(e) => setFormSaleQuantity(e.target.value)}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-900 dark:text-slate-200" />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Unit Price (MT) *' : 'Preço Unit. (MT) *'}</label>
+                      <input type="number" required step="any" value={formSaleUnitPrice} onChange={(e) => setFormSaleUnitPrice(e.target.value)}
+                        placeholder="0.00" className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-900 dark:text-slate-200" />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Sale Date' : 'Data da Venda'}</label>
+                      <input type="date" value={formSaleDate} onChange={(e) => setFormSaleDate(e.target.value)}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-lg text-slate-900 dark:text-slate-200" />
+                    </div>
+                  </div>
+
+                  {formSaleQuantity && formSaleUnitPrice && (
+                    <div className="text-right text-xs font-bold text-blue-600 dark:text-blue-400">
+                      Total: {((parseInt(formSaleQuantity) || 0) * (parseFloat(formSaleUnitPrice) || 0)).toLocaleString('pt-MZ', { minimumFractionDigits: 2 })} MT
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Payment Method' : 'Método de Pagamento'}</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(['Físico', 'M-Pesa', 'E-mola', 'Banco'] as const).map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() => setFormSalePaymentMethod(method)}
+                          className={`py-2.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+                            formSalePaymentMethod === method
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-blue-400'
+                          }`}
+                        >
+                          {method}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Notes (optional)' : 'Notas (opcional)'}</label>
+                    <input type="text" value={formSaleNotes} onChange={(e) => setFormSaleNotes(e.target.value)}
+                      placeholder={language === 'en' ? 'e.g. sold to street vendor...' : 'ex: vendido a cliente na rua...'}
+                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100" />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-900">
+                    <button type="button" onClick={() => setActiveModal(null)}
+                      className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-slate-850 text-slate-500 font-semibold text-xs rounded-lg transition-all cursor-pointer">
+                      {language === 'en' ? 'Cancel' : 'Cancelar'}
+                    </button>
+                    <button type="submit"
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer">
+                      {language === 'en' ? 'Register Sale' : 'Registar Venda'}
                     </button>
                   </div>
                 </form>

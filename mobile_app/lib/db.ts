@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type {
   StockItem, Invoice, Quote, Receipt, Expense,
-  Contact, DebtClient, CompanySettings, DocumentItem,
+  Contact, DebtClient, CompanySettings, DocumentItem, GeneralSale,
 } from '../shared/types';
 import { getInitials, getAvatarColor } from '../shared/theme';
 
@@ -622,6 +622,92 @@ export const deleteDebtClient = async (id: string) => {
 };
 
 // ─── PROFILE ─────────────────────────────────────────────────────────────────
+
+// ─── GENERAL SALES ────────────────────────────────────────────────────────────
+
+const mapGeneralSale = (row: any): GeneralSale => {
+  const seqN = row.seq_number as number;
+  const saleDate = (row.sale_date as string) ?? new Date().toISOString().slice(0, 10);
+  return {
+    id: row.id,
+    seqNumber: seqN,
+    ref: `VND-${String(seqN).padStart(4, '0')}`,
+    productId: row.product_id ?? undefined,
+    productName: row.product_name ?? '',
+    sku: row.sku ?? '',
+    quantity: row.quantity ?? 0,
+    unitPrice: parseFloat(row.unit_price) || 0,
+    totalAmount: parseFloat(row.total_amount) || 0,
+    saleDate,
+    date: toDate(saleDate),
+    datePt: toDatePt(saleDate),
+    paymentMethod: (row.payment_method ?? 'Físico') as import('../shared/types').PaymentMethod,
+    notes: row.notes ?? undefined,
+    createdAt: row.created_at ?? '',
+  };
+};
+
+export const getGeneralSales = async (userId: string): Promise<GeneralSale[]> => {
+  const { data } = await supabase
+    .from('general_sales')
+    .select('*')
+    .eq('user_id', userId)
+    .order('sale_date', { ascending: false })
+    .order('seq_number', { ascending: false });
+  return (data ?? []).map(mapGeneralSale);
+};
+
+export const createGeneralSale = async (payload: {
+  userId: string;
+  productId?: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  saleDate: string;
+  paymentMethod: import('../shared/types').PaymentMethod;
+  notes?: string;
+}): Promise<GeneralSale | null> => {
+  const totalAmount = payload.quantity * payload.unitPrice;
+  const { data, error } = await supabase
+    .from('general_sales')
+    .insert({
+      user_id: payload.userId,
+      product_id: payload.productId ?? null,
+      product_name: payload.productName,
+      sku: payload.sku,
+      quantity: payload.quantity,
+      unit_price: payload.unitPrice,
+      total_amount: totalAmount,
+      sale_date: payload.saleDate,
+      payment_method: payload.paymentMethod,
+      notes: payload.notes ?? null,
+    })
+    .select()
+    .single();
+  if (error || !data) return null;
+
+  if (payload.productId) {
+    const { data: stock } = await supabase
+      .from('stock_items')
+      .select('stock_level')
+      .eq('id', payload.productId)
+      .single();
+    if (stock) {
+      await supabase
+        .from('stock_items')
+        .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - payload.quantity) })
+        .eq('id', payload.productId);
+    }
+  }
+
+  return mapGeneralSale(data);
+};
+
+export const deleteGeneralSale = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.from('general_sales').delete().eq('id', id);
+  return !error;
+};
 
 export const getProfile = async (userId: string) => {
   const { data } = await supabase

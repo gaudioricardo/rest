@@ -6,7 +6,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
-import { Invoice, Quote, Receipt, Expense, DocumentItem, CompanySettings } from '../types';
+import { Invoice, Quote, Receipt, Expense, DocumentItem, CompanySettings, StockItem, Language, GeneralSale } from '../types';
 import { formatValue } from '../data';
 
 // ─── Resolve company profile (primary vs secondary) ──────────────────────────
@@ -797,4 +797,277 @@ export function generateFinancialReportPDF(
   doc.text(`Relatório gerado em: ${now.toLocaleString('pt-MZ')}`, pageW - 14, finalY, { align: 'right' });
 
   doc.save(`Relatorio_Financeiro_${now.toISOString().slice(0, 10)}.pdf`);
+}
+
+// ─── STOCK REPORT PDF (portrait A4) ──────────────────────────────────────────
+
+export function generateStockPDF(
+  items: StockItem[],
+  language: Language,
+  settings: CompanySettings,
+  dateFrom?: string,
+  dateTo?: string
+): void {
+  const doc = new jsPDF('portrait', 'mm', 'a4');
+  const pageW = doc.internal.pageSize.getWidth();
+  const now = new Date();
+  const isEn = language === 'en';
+  const locale = isEn ? 'en-US' : 'pt-MZ';
+
+  const fmtIso = (iso: string) =>
+    new Date(iso + 'T00:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  let y = 14;
+
+  // ── Company header ──────────────────────────────────────────────────────────
+  if (settings.logoBase64) {
+    try { doc.addImage(settings.logoBase64, 'PNG', 14, y, 20, 20); } catch { /* skip bad logo */ }
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(settings.companyName || '—', 38, y + 7);
+    doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
+    const meta = [settings.address, settings.city ? settings.city + ' — Moçambique' : '', 'NUIT: ' + (settings.nuit || '—'), settings.phone || '', settings.email || ''].filter(Boolean);
+    doc.text(meta.join('  |  '), 38, y + 13);
+    y += 28;
+  } else {
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(settings.companyName || '—', 14, y + 6);
+    doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
+    const meta = [settings.address, settings.city ? settings.city + ' — Moçambique' : '', 'NUIT: ' + (settings.nuit || '—'), settings.phone || ''].filter(Boolean);
+    doc.text(meta.join('  |  '), 14, y + 13);
+    y += 22;
+  }
+
+  // ── Divider ─────────────────────────────────────────────────────────────────
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, y, pageW - 14, y);
+  y += 7;
+
+  // ── Title + period ──────────────────────────────────────────────────────────
+  doc.setFontSize(15); doc.setFont('helvetica', 'bold'); doc.setTextColor(12, 28, 72);
+  doc.text(isEn ? 'STOCK REPORT' : 'RELATÓRIO DE STOCK', 14, y);
+
+  const periodLabel = (dateFrom || dateTo)
+    ? (isEn ? 'Period: ' : 'Período: ') + (dateFrom ? fmtIso(dateFrom) : '—') + ' → ' + (dateTo ? fmtIso(dateTo) : '—')
+    : (isEn ? 'Generated: ' : 'Gerado em: ') + now.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100);
+  doc.text(periodLabel, pageW - 14, y, { align: 'right' });
+  y += 9;
+
+  // ── KPI summary boxes ────────────────────────────────────────────────────────
+  const totalItems = items.length;
+  const inStockCount = items.filter(i => i.status === 'In Stock').length;
+  const lowCount = items.filter(i => i.status === 'Low Stock').length;
+  const outCount = items.filter(i => i.status === 'Out of Stock').length;
+  const totalValue = items.reduce((s, i) => s + i.price * i.stockLevel, 0);
+
+  const kpis: { label: string; value: string; color?: [number, number, number] }[] = [
+    { label: isEn ? 'Total Items' : 'Total Artigos', value: String(totalItems) },
+    { label: isEn ? 'In Stock' : 'Em Stock', value: String(inStockCount), color: [22, 163, 74] },
+    { label: isEn ? 'Low Stock' : 'Stock Baixo', value: String(lowCount), color: [217, 119, 6] },
+    { label: isEn ? 'Out of Stock' : 'Sem Stock', value: String(outCount), color: [220, 38, 38] },
+    { label: isEn ? 'Total Value' : 'Valor Total', value: formatValue(totalValue, 'MZN') },
+  ];
+  const kpiW = (pageW - 28) / kpis.length;
+  kpis.forEach((kpi, idx) => {
+    const x = 14 + idx * kpiW;
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(x, y, kpiW - 2, 16, 2, 2, 'FD');
+    doc.setFontSize(6); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+    doc.text(kpi.label.toUpperCase(), x + (kpiW - 2) / 2, y + 5.5, { align: 'center' });
+    const [r, g, b] = kpi.color ?? [15, 23, 42];
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(r, g, b);
+    doc.text(kpi.value, x + (kpiW - 2) / 2, y + 12.5, { align: 'center' });
+  });
+  y += 22;
+
+  // ── Stock table ──────────────────────────────────────────────────────────────
+  const head = isEn
+    ? [['Name', 'SKU', 'Category', 'Stock', 'Max', '%', 'Unit Price (MT)', 'Status']]
+    : [['Nome', 'SKU', 'Categoria', 'Stock', 'Máx.', '%', 'Preço Unit. (MT)', 'Estado']];
+
+  const body = items.map(item => {
+    const pct = item.maxStock > 0 ? Math.min(100, Math.floor((item.stockLevel / item.maxStock) * 100)) : 0;
+    return [
+      item.name,
+      item.sku,
+      isEn ? item.category : item.categoryPt,
+      item.stockLevel.toLocaleString('pt-MZ'),
+      item.maxStock.toLocaleString('pt-MZ'),
+      pct + '%',
+      formatValue(item.price, 'MZN'),
+      isEn ? item.status : item.statusPt,
+    ];
+  });
+
+  autoTable(doc, {
+    startY: y,
+    head,
+    body,
+    theme: 'striped',
+    headStyles: { fillColor: [12, 28, 72], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59], cellPadding: 3 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 45 },
+      1: { cellWidth: 22, halign: 'center' },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 16, halign: 'right' },
+      4: { cellWidth: 16, halign: 'right' },
+      5: { cellWidth: 12, halign: 'right' },
+      6: { cellWidth: 25, halign: 'right' },
+      7: { cellWidth: 18, halign: 'center' },
+    },
+    didParseCell: (data) => {
+      if (data.section !== 'body') return;
+      if (data.column.index === 7) {
+        const val = data.cell.raw as string;
+        if (val === 'In Stock' || val === 'Em Stock') {
+          data.cell.styles.textColor = [22, 163, 74]; data.cell.styles.fontStyle = 'bold';
+        } else if (val === 'Low Stock' || val === 'Stock Baixo') {
+          data.cell.styles.textColor = [217, 119, 6]; data.cell.styles.fontStyle = 'bold';
+        } else {
+          data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = 'bold';
+        }
+      }
+      if (data.column.index === 5) {
+        const pct = parseInt(data.cell.raw as string);
+        if (pct === 0) data.cell.styles.textColor = [220, 38, 38];
+        else if (pct <= 35) data.cell.styles.textColor = [217, 119, 6];
+        else data.cell.styles.textColor = [22, 163, 74];
+        data.cell.styles.fontStyle = 'bold';
+      }
+    },
+    margin: { left: 14, right: 14 },
+    didDrawPage: (data) => {
+      const pN = data.pageNumber;
+      const ph = doc.internal.pageSize.getHeight();
+      doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 150);
+      doc.text(settings.companyName || '', 14, ph - 8);
+      doc.text(`${isEn ? 'Page' : 'Pág.'} ${pN}`, pageW - 14, ph - 8, { align: 'right' });
+    },
+  });
+
+  doc.save(`Stock_Report_${now.toISOString().slice(0, 10)}.pdf`);
+}
+
+// ─── GENERAL SALES REPORT PDF (portrait A4) ──────────────────────────────────
+
+export function generateGeneralSalesPDF(
+  sales: GeneralSale[],
+  language: Language,
+  settings: CompanySettings,
+  dateFrom?: string,
+  dateTo?: string
+): void {
+  const doc = new jsPDF('portrait', 'mm', 'a4');
+  const pageW = doc.internal.pageSize.getWidth();
+  const now = new Date();
+  const isEn = language === 'en';
+  const locale = isEn ? 'en-US' : 'pt-MZ';
+  const fmtIso = (iso: string) =>
+    new Date(iso + 'T00:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  let y = 14;
+
+  if (settings.logoBase64) {
+    try { doc.addImage(settings.logoBase64, 'PNG', 14, y, 20, 20); } catch { /* skip */ }
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(settings.companyName || '—', 38, y + 7);
+    doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
+    const meta = [settings.address, settings.city ? settings.city + ' — Moçambique' : '', 'NUIT: ' + (settings.nuit || '—'), settings.phone || ''].filter(Boolean);
+    doc.text(meta.join('  |  '), 38, y + 13);
+    y += 28;
+  } else {
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(settings.companyName || '—', 14, y + 6);
+    doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
+    const meta = [settings.address, settings.city ? settings.city + ' — Moçambique' : '', 'NUIT: ' + (settings.nuit || '—'), settings.phone || ''].filter(Boolean);
+    doc.text(meta.join('  |  '), 14, y + 13);
+    y += 22;
+  }
+
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, y, pageW - 14, y);
+  y += 7;
+
+  doc.setFontSize(15); doc.setFont('helvetica', 'bold'); doc.setTextColor(12, 28, 72);
+  doc.text(isEn ? 'GENERAL SALES REPORT' : 'RELATÓRIO DE VENDAS GERAIS', 14, y);
+  const periodLabel = (dateFrom || dateTo)
+    ? (isEn ? 'Period: ' : 'Período: ') + (dateFrom ? fmtIso(dateFrom) : '—') + ' → ' + (dateTo ? fmtIso(dateTo) : '—')
+    : (isEn ? 'Generated: ' : 'Gerado em: ') + now.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+  doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100);
+  doc.text(periodLabel, pageW - 14, y, { align: 'right' });
+  y += 9;
+
+  const totalRevenue = sales.reduce((s, sv) => s + sv.totalAmount, 0);
+  const totalQty = sales.reduce((s, sv) => s + sv.quantity, 0);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayTotal = sales.filter(sv => sv.saleDate === todayStr).reduce((s, sv) => s + sv.totalAmount, 0);
+  const kpis: { label: string; value: string }[] = [
+    { label: isEn ? 'Total Sales' : 'Total Vendas', value: String(sales.length) },
+    { label: isEn ? 'Items Sold' : 'Itens Vendidos', value: String(totalQty) },
+    { label: isEn ? 'Revenue' : 'Receita Total', value: formatValue(totalRevenue, 'MZN') },
+    { label: isEn ? 'Today' : 'Hoje', value: formatValue(todayTotal, 'MZN') },
+  ];
+  const kpiW = (pageW - 28) / kpis.length;
+  kpis.forEach((kpi, idx) => {
+    const x = 14 + idx * kpiW;
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(x, y, kpiW - 2, 16, 2, 2, 'FD');
+    doc.setFontSize(6); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+    doc.text(kpi.label.toUpperCase(), x + (kpiW - 2) / 2, y + 5.5, { align: 'center' });
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(kpi.value, x + (kpiW - 2) / 2, y + 12.5, { align: 'center' });
+  });
+  y += 22;
+
+  const head = isEn
+    ? [['Ref', 'Product', 'SKU', 'Qty', 'Unit Price (MT)', 'Total (MT)', 'Payment', 'Date', 'Notes']]
+    : [['Ref', 'Produto', 'SKU', 'Qtd', 'Preço Unit. (MT)', 'Total (MT)', 'Pagamento', 'Data', 'Notas']];
+  const body = sales.map(sv => [
+    sv.ref,
+    sv.productName,
+    sv.sku || '—',
+    String(sv.quantity),
+    formatValue(sv.unitPrice, 'MZN'),
+    formatValue(sv.totalAmount, 'MZN'),
+    sv.paymentMethod,
+    isEn ? sv.date : sv.datePt,
+    sv.notes || '—',
+  ]);
+
+  autoTable(doc, {
+    startY: y,
+    head,
+    body,
+    theme: 'striped',
+    headStyles: { fillColor: [12, 28, 72], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59], cellPadding: 3 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 16, halign: 'center' },
+      1: { cellWidth: 36 },
+      2: { cellWidth: 18, halign: 'center' },
+      3: { cellWidth: 10, halign: 'right' },
+      4: { cellWidth: 24, halign: 'right' },
+      5: { cellWidth: 24, halign: 'right' },
+      6: { cellWidth: 18, halign: 'center' },
+      7: { cellWidth: 20, halign: 'center' },
+      8: { cellWidth: 'auto' },
+    },
+    foot: [[
+      '', isEn ? `TOTAL (${sales.length} sales)` : `TOTAL (${sales.length} vendas)`, '', String(totalQty), '', formatValue(totalRevenue, 'MZN'), '', '', '',
+    ]],
+    footStyles: { fillColor: [12, 28, 72], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+    margin: { left: 14, right: 14 },
+    didDrawPage: (data) => {
+      const ph = doc.internal.pageSize.getHeight();
+      doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 150);
+      doc.text(settings.companyName || '', 14, ph - 8);
+      doc.text(`${isEn ? 'Page' : 'Pág.'} ${data.pageNumber}`, pageW - 14, ph - 8, { align: 'right' });
+    },
+  });
+
+  doc.save(`Vendas_Gerais_${now.toISOString().slice(0, 10)}.pdf`);
 }

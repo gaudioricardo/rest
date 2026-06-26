@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Invoice, Quote, Receipt, StockItem, Expense, Contact, DebtClient } from '../shared/types';
+import type { Invoice, Quote, Receipt, StockItem, Expense, Contact, DebtClient, GeneralSale } from '../shared/types';
 import * as db from '../lib/db';
 
 interface DataState {
@@ -10,6 +10,7 @@ interface DataState {
   expenses: Expense[];
   contacts: Contact[];
   debtClients: DebtClient[];
+  generalSales: GeneralSale[];
   loading: boolean;
 
   loadAll: (userId: string) => Promise<void>;
@@ -20,6 +21,7 @@ interface DataState {
   loadExpenses: (userId: string) => Promise<void>;
   loadContacts: (userId: string) => Promise<void>;
   loadClients: (userId: string) => Promise<void>;
+  loadGeneralSales: (userId: string) => Promise<void>;
 }
 
 export const useDataStore = create<DataState>((set) => ({
@@ -30,12 +32,13 @@ export const useDataStore = create<DataState>((set) => ({
   expenses: [],
   contacts: [],
   debtClients: [],
+  generalSales: [],
   loading: false,
 
   loadAll: async (userId) => {
     set({ loading: true });
     try {
-      const [invoices, quotes, receipts, stockItems, expenses, contacts, debtClients] =
+      const [invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, generalSales] =
         await Promise.all([
           db.getInvoices(userId),
           db.getQuotes(userId),
@@ -44,8 +47,9 @@ export const useDataStore = create<DataState>((set) => ({
           db.getExpenses(userId),
           db.getContacts(userId),
           db.getDebtClients(userId),
+          db.getGeneralSales(userId),
         ]);
-      set({ invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, loading: false });
+      set({ invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, generalSales, loading: false });
     } catch {
       set({ loading: false });
     }
@@ -78,5 +82,9 @@ export const useDataStore = create<DataState>((set) => ({
   loadClients: async (userId) => {
     const debtClients = await db.getDebtClients(userId);
     set({ debtClients });
+  },
+  loadGeneralSales: async (userId) => {
+    const generalSales = await db.getGeneralSales(userId);
+    set({ generalSales });
   },
 }));

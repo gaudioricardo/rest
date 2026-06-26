@@ -7,24 +7,22 @@ import { useState } from 'react';
 import {
   Share2,
   ChevronDown,
-  TableProperties,
-  FileSpreadsheet,
   FileCheck,
   Edit3,
   MoreVertical,
   ChevronLeft,
   ChevronRight,
-  Search,
   Filter,
-  CheckCircle,
   PackagePlus,
-  ArrowRight,
-  Trash2
+  Trash2,
+  CalendarDays,
+  X
 } from 'lucide-react';
-import { StockItem, Language, Currency } from '../types';
+import { StockItem, Language, Currency, CompanySettings } from '../types';
 import { formatValue } from '../data';
 import * as db from '../lib/db';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import { generateStockPDF } from '../lib/pdf';
 
 interface StockViewProps {
   stockItems: StockItem[];
@@ -34,6 +32,7 @@ interface StockViewProps {
   onAddItem: () => void;
   triggerToast: (title: string, titlePt: string, desc: string, descPt: string, type: 'success' | 'info') => void;
   searchQuery: string;
+  companySettings: CompanySettings;
 }
 
 export default function StockView({
@@ -43,7 +42,8 @@ export default function StockView({
   currency,
   onAddItem,
   triggerToast,
-  searchQuery
+  searchQuery,
+  companySettings,
 }: StockViewProps) {
   
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
@@ -58,6 +58,8 @@ export default function StockView({
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedWarehouse, setSelectedWarehouse] = useState('All');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [showExportDropdown, setShowExportDropdown] = useState(false);
 
   // Pagination states
@@ -131,30 +133,29 @@ export default function StockView({
 
   // Filters logic
   const filteredItems = stockItems.filter(item => {
-    // Search match
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.sku.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Category match
+
     const catVal = getCategoryKey(selectedCategory);
     const matchesCategory = catVal === 'All' || item.category === catVal;
-    
-    // Status match
-    const statusVal = selectedStatus;
-    const matchesStatus = statusVal === 'All' || 
-      (statusVal === 'In Stock' && item.status === 'In Stock') ||
-      (statusVal === 'Low Stock' && item.status === 'Low Stock') ||
-      (statusVal === 'Out of Stock' && item.status === 'Out of Stock');
 
-    // Warehouse match
+    const matchesStatus = selectedStatus === 'All' ||
+      (selectedStatus === 'In Stock' && item.status === 'In Stock') ||
+      (selectedStatus === 'Low Stock' && item.status === 'Low Stock') ||
+      (selectedStatus === 'Out of Stock' && item.status === 'Out of Stock');
+
     const wVal = selectedWarehouse;
-    const matchesWarehouse = wVal === 'All' || 
+    const matchesWarehouse = wVal === 'All' ||
       (wVal === 'NYC' && item.warehouse.includes('NYC')) ||
       (wVal === 'West' && item.warehouse.includes('West')) ||
       (wVal === 'Maputo' && item.warehousePt.includes('Maputo')) ||
       (wVal === 'Beira' && item.warehousePt.includes('Beira'));
 
-    return matchesSearch && matchesCategory && matchesStatus && matchesWarehouse;
+    const itemDate = item.createdAt ? item.createdAt.slice(0, 10) : '';
+    const matchesFrom = !dateFrom || itemDate >= dateFrom;
+    const matchesTo = !dateTo || itemDate <= dateTo;
+
+    return matchesSearch && matchesCategory && matchesStatus && matchesWarehouse && matchesFrom && matchesTo;
   });
 
   const lowStockCount = filteredItems.filter(item => item.status !== 'In Stock').length;
@@ -213,14 +214,10 @@ export default function StockView({
             {showExportDropdown && (
               <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded shadow-xl z-50 overflow-hidden text-left animation-fade-in text-xs font-semibold text-slate-700 dark:text-slate-300">
                 <button
-                  onClick={() => { alert(language === 'en' ? 'Generating Microsoft Excel stock lists...' : 'A gerar planilhas de stock em formato Excel...'); setShowExportDropdown(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-850 transition-colors"
-                >
-                  <FileSpreadsheet size={14} className="text-emerald-600" />
-                  <span>{language === 'en' ? 'Export to Excel' : 'Exportar para Excel'}</span>
-                </button>
-                <button
-                  onClick={() => { alert(language === 'en' ? 'Exporting inventory records in PDF...' : 'A gerar registros em formato PDF...'); setShowExportDropdown(false); }}
+                  onClick={() => {
+                    setShowExportDropdown(false);
+                    generateStockPDF(filteredItems, language, companySettings, dateFrom || undefined, dateTo || undefined);
+                  }}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-850 transition-colors"
                 >
                   <FileCheck size={14} className="text-red-500" />
@@ -233,6 +230,43 @@ export default function StockView({
       </div>
 
 
+
+      {/* Date filter strip */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded px-3 py-1.5 shadow-xs">
+          <CalendarDays size={13} className="text-slate-400 flex-shrink-0" />
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+            {language === 'en' ? 'From' : 'De'}
+          </span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+            className="bg-transparent border-none text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer font-semibold"
+          />
+        </div>
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded px-3 py-1.5 shadow-xs">
+          <CalendarDays size={13} className="text-slate-400 flex-shrink-0" />
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+            {language === 'en' ? 'To' : 'Até'}
+          </span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+            className="bg-transparent border-none text-xs text-slate-700 dark:text-slate-300 outline-none cursor-pointer font-semibold"
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <button
+            onClick={() => { setDateFrom(''); setDateTo(''); setCurrentPage(1); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-slate-700 rounded hover:border-red-300 dark:hover:border-red-700 transition-colors cursor-pointer"
+          >
+            <X size={11} />
+            {language === 'en' ? 'Clear dates' : 'Limpar datas'}
+          </button>
+        )}
+      </div>
 
       {/* Bento Filter Strip panel */}
       <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3">

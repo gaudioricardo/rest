@@ -90,7 +90,7 @@ export default function DashboardScreen() {
   const { showToast } = useToast();
   const { language, darkMode, company } = useSettingsStore();
   const { userId } = useAuthStore();
-  const { invoices, quotes, receipts, stockItems, expenses, loadAll, loading } = useDataStore();
+  const { invoices, quotes, receipts, stockItems, expenses, generalSales, loadAll, loading } = useDataStore();
   const [refreshing, setRefreshing] = React.useState(false);
   const [generatingReport, setGeneratingReport] = React.useState(false);
 
@@ -107,9 +107,13 @@ export default function DashboardScreen() {
   const todayStr = today.toISOString().slice(0, 10);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
 
-  const salesToday = invoices
+  const invoiceSalesToday = invoices
     .filter((i) => i.status === 'Paid' && i.issueDate >= todayStr)
     .reduce((s, i) => s + i.amount, 0);
+  const generalSalesToday = generalSales
+    .filter((gs) => gs.saleDate === todayStr)
+    .reduce((s, gs) => s + gs.totalAmount, 0);
+  const salesToday = invoiceSalesToday + generalSalesToday;
 
   const monthlyRevenue = invoices
     .filter((i) => i.status === 'Paid' && i.issueDate >= monthStart)
@@ -170,8 +174,8 @@ export default function DashboardScreen() {
             <><KpiSkeleton palette={palette} /><KpiSkeleton palette={palette} /></>
           ) : (
             <>
-              <KpiCard title={tr(lang, 'salesToday')} value={formatCurrency(salesToday)} icon="cash-outline" iconColor={Colors.success} />
-              <KpiCard title={tr(lang, 'monthlyRevenue')} value={formatCurrency(monthlyRevenue)} icon="trending-up-outline" iconColor={Colors.primary} />
+              <KpiCard title={tr(lang, 'salesToday')} value={formatCurrency(salesToday)} icon="cash-outline" iconColor={Colors.success} onPress={() => router.push('/(app)/vendas/list')} />
+              <KpiCard title={tr(lang, 'monthlyRevenue')} value={formatCurrency(monthlyRevenue)} icon="trending-up-outline" iconColor={Colors.primary} onPress={() => router.push('/(app)/(tabs)/reports')} />
             </>
           )}
         </View>
@@ -180,8 +184,8 @@ export default function DashboardScreen() {
             <><KpiSkeleton palette={palette} /><KpiSkeleton palette={palette} /></>
           ) : (
             <>
-              <KpiCard title={tr(lang, 'pendingInvoices')} value={`${pendingCount} · ${formatCurrency(pendingAmount)}`} icon="time-outline" iconColor={Colors.warning} />
-              <KpiCard title={tr(lang, 'lowStockItems')} value={String(lowStockCount)} icon="warning-outline" iconColor={Colors.error} />
+              <KpiCard title={tr(lang, 'pendingInvoices')} value={`${pendingCount} · ${formatCurrency(pendingAmount)}`} icon="time-outline" iconColor={Colors.warning} onPress={() => router.push('/(app)/invoice/list')} />
+              <KpiCard title={tr(lang, 'lowStockItems')} value={String(lowStockCount)} icon="warning-outline" iconColor={Colors.error} onPress={() => router.push('/(app)/stock/list')} />
             </>
           )}
         </View>

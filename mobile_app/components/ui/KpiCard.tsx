@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { Colors, FontSize, Spacing } from '../../shared/theme';
@@ -12,16 +12,17 @@ interface Props {
   iconColor?: string;
   change?: string;
   positive?: boolean;
+  onPress?: () => void;
 }
 
 export const KpiCard: React.FC<Props> = ({
-  title, value, icon, iconColor = Colors.primary, change, positive,
+  title, value, icon, iconColor = Colors.primary, change, positive, onPress,
 }) => {
   const dark = useSettingsStore((s) => s.darkMode);
   const palette = dark ? Colors.dark : Colors.light;
 
-  return (
-    <Card style={styles.card} padding={Spacing.md}>
+  const inner = (
+    <>
       <View style={styles.row}>
         <View style={[styles.iconBox, { backgroundColor: iconColor + '18' }]}>
           <Ionicons name={icon as any} size={22} color={iconColor} />
@@ -34,6 +35,22 @@ export const KpiCard: React.FC<Props> = ({
       </View>
       <Text style={[styles.value, { color: palette.text }]}>{value}</Text>
       <Text style={[styles.title, { color: palette.textMuted }]}>{title}</Text>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
+        <Card style={styles.fill} padding={Spacing.md}>
+          {inner}
+        </Card>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <Card style={styles.card} padding={Spacing.md}>
+      {inner}
     </Card>
   );
 };
@@ -42,6 +59,9 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     minWidth: 140,
+  },
+  fill: {
+    flex: 1,
   },
   row: {
     flexDirection: 'row',

@@ -4,40 +4,47 @@
  */
 
 import { TrendingUp, AlertCircle, Package, ArrowRight, CornerDownRight, Plus, BarChart2 } from 'lucide-react';
-import { Transaction, StockItem, Invoice, Language, Currency } from '../types';
+import { Transaction, StockItem, Invoice, Language, Currency, GeneralSale } from '../types';
 import { formatValue } from '../data';
 
 interface DashboardViewProps {
   transactions: Transaction[];
   stockItems: StockItem[];
   invoices: Invoice[];
+  generalSales: GeneralSale[];
   language: Language;
   currency: Currency;
   onNavigate: (tab: string) => void;
   onNewInvoice: () => void;
   onAddStock: () => void;
   onGenerateReport: () => void;
+  onNavigateToVendas: () => void;
 }
 
 export default function DashboardView({
   transactions,
   stockItems,
   invoices,
+  generalSales,
   language,
   currency,
   onNavigate,
   onNewInvoice,
   onAddStock,
-  onGenerateReport
+  onGenerateReport,
+  onNavigateToVendas,
 }: DashboardViewProps) {
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+
   // KPIs calculated from live data
-  const totalSalesToday = transactions
-    .filter(tx => tx.status === 'Paid')
-    .reduce((sum, tx) => sum + tx.amount, 0);
+  const totalSalesToday = generalSales
+    .filter(s => s.saleDate === todayStr)
+    .reduce((sum, s) => sum + s.totalAmount, 0);
 
   const monthlyRevenue = invoices
-    .filter(inv => inv.status === 'Paid')
+    .filter(inv => inv.status === 'Paid' && inv.issueDate >= monthStart)
     .reduce((sum, inv) => sum + inv.amount, 0);
 
   const pendingInvs = invoices.filter(inv => inv.status === 'Pending' || inv.status === 'Overdue');
@@ -80,7 +87,7 @@ export default function DashboardView({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
         {/* Sales Today Card */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group cursor-pointer" onClick={onNavigateToVendas}>
           <div className="flex justify-between items-start">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-display">
               {language === 'en' ? 'Sales Today' : 'Vendas Hoje'}
@@ -100,7 +107,7 @@ export default function DashboardView({
         </div>
 
         {/* Monthly Revenue Card */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group cursor-pointer" onClick={() => onNavigate('reports')}>
           <div className="flex justify-between items-start">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-display">
               {language === 'en' ? 'Monthly Revenue' : 'Receita Mensal'}
@@ -120,7 +127,7 @@ export default function DashboardView({
         </div>
 
         {/* Pending Invoices Card */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group cursor-pointer" onClick={() => onNavigate('invoices')}>
           <div className="flex justify-between items-start">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-display">
               {language === 'en' ? 'Pending Invoices' : 'Facturas Pendentes'}
@@ -143,7 +150,7 @@ export default function DashboardView({
         </div>
 
         {/* Low Stock Items Card */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded border border-slate-200/60 dark:border-primary-container/20 shadow-xs flex flex-col justify-between transition-smooth hover:shadow-md hover:border-slate-350 dark:hover:border-primary-container group cursor-pointer" onClick={() => onNavigate('stock')}>
           <div className="flex justify-between items-start">
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-display">
               {language === 'en' ? 'Low Stock Items' : 'Itens Stock Baixo'}
