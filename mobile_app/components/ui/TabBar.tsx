@@ -1,8 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring, interpolate,
-} from 'react-native-reanimated';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabActions } from '@react-navigation/native';
 import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
@@ -10,92 +7,57 @@ import { Colors } from '../../shared/theme';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 // ─── Tune these values to adjust the bar's look and feel ─────────────────────
-const BAR_HEIGHT = 62;        // total height of the bar pill
+const BAR_HEIGHT = 68;        // total height of the bar pill (increased for label)
 const BAR_RADIUS = 32;        // outer bar corner radius
 const BAR_H_MARGIN = 14;      // gap between bar and screen edges
 const BAR_BOTTOM_GAP = 10;    // gap between bar bottom and safe-area inset
 
 // Clearance screens must add as paddingBottom so content clears the floating bar
 export const TAB_BAR_BOTTOM_INSET = BAR_HEIGHT + BAR_BOTTOM_GAP * 2;
-const PILL_RADIUS = 22;       // active tab inner pill corner radius
-const PILL_V_INSET = 8;       // vertical padding inside active pill
-const PILL_H_INSET = 8;       // horizontal padding inside active pill
-const ICON_SIZE = 21;         // icon size
-const LABEL_SIZE = 11;        // active label font size
-const ACTIVE_FLEX = 2.6;      // flex weight of active tab (inactive = 1)
-const LABEL_MAX_W = 96;       // max animated width for active label text
-const SPRING = { mass: 0.7, damping: 16, stiffness: 210 } as const;
+const ICON_SIZE = 20;         // icon size
+const LABEL_SIZE = 9.5;       // static label font size (below icon)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Per-tab animated item
 function TabItem({
-  isFocused, options, label, onPress, onLongPress, palette,
+  isFocused, options, label, showLabel, onPress, onLongPress, palette,
 }: {
   isFocused: boolean;
   options: any;
   label: string;
+  showLabel: boolean;
   onPress: () => void;
   onLongPress: () => void;
   palette: any;
 }) {
-  const progress = useSharedValue(isFocused ? 1 : 0);
-
-  useEffect(() => {
-    progress.value = withSpring(isFocused ? 1 : 0, SPRING);
-  }, [isFocused]);
-
-  // Active tab expands its flex weight to make room for the label
-  const containerAnim = useAnimatedStyle(() => ({
-    flex: interpolate(progress.value, [0, 1], [1, ACTIVE_FLEX]),
-  }));
-
-  // Pill background fades in
-  const pillAnim = useAnimatedStyle(() => ({
-    opacity: progress.value,
-  }));
-
-  // Label slides out from behind the icon
-  const labelAnim = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    maxWidth: interpolate(progress.value, [0, 1], [0, LABEL_MAX_W]),
-    marginLeft: interpolate(progress.value, [0, 1], [0, 5]),
-  }));
-
   const iconColor = isFocused ? palette.accent : palette.textMuted;
+  const labelColor = isFocused ? palette.accent : palette.textMuted;
 
   return (
-    <Animated.View style={[styles.itemWrap, containerAnim]}>
+    <View style={styles.itemWrap}>
       <TouchableOpacity
         onPress={onPress}
         onLongPress={onLongPress}
         activeOpacity={0.72}
         style={styles.touch}
       >
-        {/* Active pill background */}
-        <Animated.View
-          style={[
-            styles.pill,
-            pillAnim,
-            { backgroundColor: palette.accent + '22' },
-          ]}
-        />
-
-        {/* Icon + label row */}
-        <View style={styles.row}>
+        {/* Icon + label column */}
+        <View style={styles.column}>
           {options.tabBarIcon?.({ focused: isFocused, color: iconColor, size: ICON_SIZE })}
-          <Animated.Text
-            numberOfLines={1}
-            style={[
-              styles.label,
-              labelAnim,
-              { color: palette.accent },
-            ]}
-          >
-            {label}
-          </Animated.Text>
+          {showLabel && (
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.label,
+                { color: labelColor, fontWeight: isFocused ? '700' : '500' },
+              ]}
+            >
+              {label}
+            </Text>
+          )}
         </View>
       </TouchableOpacity>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -149,6 +111,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: MaterialTopTa
               isFocused={isFocused}
               options={options}
               label={label}
+              showLabel={route.name !== 'more'}
               onPress={onPress}
               onLongPress={onLongPress}
               palette={palette}
@@ -180,6 +143,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   itemWrap: {
+    flex: 1,
     height: BAR_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
@@ -192,21 +156,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pill: {
-    position: 'absolute',
-    top: PILL_V_INSET,
-    bottom: PILL_V_INSET,
-    left: PILL_H_INSET,
-    right: PILL_H_INSET,
-    borderRadius: PILL_RADIUS,
-  },
-  row: {
-    flexDirection: 'row',
+  column: {
+    flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
   },
   label: {
-    fontFamily: 'PlayfairDisplay_700Bold',
     fontSize: LABEL_SIZE,
     overflow: 'hidden',
+    letterSpacing: 0.1,
   },
 });
