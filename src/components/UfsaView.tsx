@@ -99,23 +99,25 @@ export default function UfsaView({ language, onNewItems }: UfsaViewProps) {
 
   // ─── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
+    // Capture lastSeen BEFORE any await — Effect 2 will update it on mount,
+    // but we want to compare against the previous visit's timestamp.
+    const lastSeen = localStorage.getItem(LAST_SEEN_KEY) ?? '';
     setLoading(true);
     setError(null);
     try {
       const { data, error: err } = await supabase
         .from('oportunidades')
         .select('*')
-        .order('data_abertura', { ascending: true });
+        .order('data_abertura', { ascending: true, nullsFirst: false });
 
       if (err) throw err;
       const rows = (data ?? []) as Oportunidade[];
       setItems(rows);
 
-      // Badge logic — compare max(actualizado_em) with last seen
+      // Badge logic — compare max(actualizado_em) with pre-fetch lastSeen
       if (rows.length > 0) {
         const maxTs = rows.reduce((acc, r) =>
           r.actualizado_em > acc ? r.actualizado_em : acc, rows[0].actualizado_em);
-        const lastSeen = localStorage.getItem(LAST_SEEN_KEY) ?? '';
         onNewItems?.(maxTs > lastSeen);
       }
     } catch (e: unknown) {
@@ -211,17 +213,16 @@ export default function UfsaView({ language, onNewItems }: UfsaViewProps) {
         </div>
 
         <div className="flex items-center gap-2 self-start shrink-0">
-          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50">
-            {language === 'en' ? 'Coming Soon' : 'Brevemente'}
-          </span>
           <button
             onClick={handleSync}
             disabled={syncing}
-            title={language === 'en' ? 'Live sync not yet available' : 'Sincronização automática em breve'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary/40 text-white/60 text-xs font-semibold cursor-not-allowed self-start shrink-0"
+            title={language === 'en' ? 'Fetch latest tenders from UFSA' : 'Obter concursos mais recentes da UFSA'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary hover:bg-primary-container disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors self-start shrink-0 cursor-pointer"
           >
-            <RefreshCw size={13} />
-            {language === 'en' ? 'Sync now' : 'Sincronizar'}
+            <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+            {syncing
+              ? (language === 'en' ? 'Syncing…' : 'A sincronizar…')
+              : (language === 'en' ? 'Sync now' : 'Sincronizar')}
           </button>
         </div>
       </div>

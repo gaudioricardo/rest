@@ -70,7 +70,7 @@ export default function VendasView({
             </h2>
           </div>
           <p className="text-slate-500 text-xs">
-            {isEn ? 'Informal sales without fiscal documents — stock lifecycle linked.' : 'Vendas avulsas sem documento fiscal — ligadas ao ciclo de vida do stock.'}
+            {isEn ? 'Dayly sales.' : 'Vendas do dia.'}
           </p>
         </div>
       </div>

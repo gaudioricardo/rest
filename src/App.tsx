@@ -313,6 +313,23 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // ─── UFSA badge background check ─────────────────────────────────────────
+  // Runs once on auth so the badge shows on any tab, not just when UfsaView mounts
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    supabase
+      .from('oportunidades')
+      .select('actualizado_em')
+      .order('actualizado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        const lastSeen = localStorage.getItem('ufsa_last_seen_ts') ?? '';
+        if (data.actualizado_em > lastSeen) setHasNewUfsa(true);
+      });
+  }, [isAuthenticated]);
+
   // ─── Preference persistence ───────────────────────────────────────────────
   useEffect(() => {
     localStorage.setItem('invstock_lang', language);
