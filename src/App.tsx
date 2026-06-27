@@ -7,6 +7,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StockItem, Transaction, Invoice, Quote, Receipt, Expense, Contact, Language, Currency, ToastMessage, CompanySettings, DocumentItem, DebtClient, GeneralSale } from './types';
 import NavBar from './components/NavBar';
 import Header from './components/Header';
+import UpdateModal from './components/UpdateModal';
+import { useUpdateDetector } from './lib/useUpdateDetector';
 import DashboardView from './components/DashboardView';
 import StockView from './components/StockView';
 import InvoicesView from './components/InvoicesView';
@@ -30,6 +32,8 @@ import { formatValue } from './data';
 import logoUrl from './assets/Logo.webp';
 
 export default function App() {
+
+  const updateAvailable = useUpdateDetector();
 
   // ─── Preloader fixo de 3.5s — cobre todas as camadas ───────────────────
   const [showPreloader, setShowPreloader] = useState<boolean>(true);
@@ -2620,6 +2624,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── Update available modal ─────────────────────────────── */}
+      {updateAvailable && <UpdateModal language={language} />}
 
     </div>
   );

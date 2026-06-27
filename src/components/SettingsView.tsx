@@ -840,7 +840,7 @@ badgeColor: 'emerald',
                 <MessageCircle size={18} />
                 <div className="text-left">
                   <p className="text-sm font-bold leading-tight">WhatsApp Support</p>
-                  <p className="text-[10px] opacity-80 font-normal">+258 84 000 0000</p>
+                  <p className="text-[10px] opacity-80 font-normal">+258 86 350 3126</p>
                 </div>
               </button>
               <button
@@ -850,7 +850,7 @@ badgeColor: 'emerald',
                 <Mail size={16} className="text-slate-400 shrink-0" />
                 <div className="text-left">
                   <p className="text-sm font-semibold leading-tight">Email Support</p>
-                  <p className="text-[10px] text-slate-400 font-normal">support@ugest.co.mz</p>
+                  <p className="text-[10px] text-slate-400 font-normal">wisasulda@gamil.com</p>
                 </div>
               </button>
             </div>
