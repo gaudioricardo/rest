@@ -11,7 +11,8 @@ export interface StockItem {
   categoryPt: string;
   stockLevel: number;
   maxStock: number;
-  price: number; // in MZN
+  price: number; // purchase price in MZN
+  salePrice?: number; // sale price in MZN
   status: 'In Stock' | 'Low Stock' | 'Out of Stock';
   statusPt: 'Em Stock' | 'Stock Baixo' | 'Sem Stock';
   warehouse: string;

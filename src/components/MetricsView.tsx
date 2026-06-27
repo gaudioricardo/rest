@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, Activity, FileDown, Paperclip, TrendingUp, Calendar } from 'lucide-react';
+import { ChevronLeft, Activity, FileDown, Paperclip, TrendingUp, Calendar, BarChart2 } from 'lucide-react';
 import { Invoice, Quote, Receipt as ReceiptType, Expense, Language, CompanySettings } from '../types';
 import { formatValue } from '../data';
 import jsPDF from 'jspdf';
@@ -170,6 +170,65 @@ function BarChart({ data, colorA, colorB, labelA, labelB, height = 72, peakIdx =
   );
 }
 
+// ─── Line chart (SVG polyline) ────────────────────────────────────────────────
+function LineChart({ data, colorA, colorB, labelA, labelB, height = 56 }: {
+  data: { label: string; a: number; b: number }[];
+  colorA: string; colorB: string; labelA: string; labelB: string; height?: number;
+}) {
+  if (data.length === 0) {
+    return <p className="text-xs text-slate-400 text-center py-6">Sem dados neste período.</p>;
+  }
+  const max = Math.max(...data.flatMap(d => [d.a, d.b]), 1);
+  const W = 480;
+  const TOP = 18;
+  const BOTTOM = 36;
+  const n = data.length;
+  const xOf = (i: number) => n <= 1 ? W / 2 : (i / (n - 1)) * W;
+  const yOf = (val: number) => TOP + height - (val / max) * height;
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 mb-3 flex-wrap">
+        <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+          <span className="w-5 h-0.5 inline-block rounded" style={{ backgroundColor: colorA }} />
+          {labelA}
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+          <span className="w-5 h-0.5 inline-block rounded" style={{ backgroundColor: colorB }} />
+          {labelB}
+        </span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${TOP + height + BOTTOM}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+        {[0, 0.5, 1].map(pct => (
+          <line key={pct}
+            x1={0} y1={TOP + height * (1 - pct)} x2={W} y2={TOP + height * (1 - pct)}
+            stroke="#e2e8f0" strokeWidth={pct === 1 ? 1 : 0.5} strokeDasharray={pct < 1 ? '4 3' : undefined}
+          />
+        ))}
+        <polyline
+          points={data.map((d, i) => `${xOf(i)},${yOf(d.a)}`).join(' ')}
+          fill="none" stroke={colorA} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+        />
+        <polyline
+          points={data.map((d, i) => `${xOf(i)},${yOf(d.b)}`).join(' ')}
+          fill="none" stroke={colorB} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+        />
+        {data.map((d, i) => {
+          const x = xOf(i);
+          return (
+            <g key={d.label}>
+              <circle cx={x} cy={yOf(d.a)} r={3.5} fill={colorA} stroke="white" strokeWidth={1.5} />
+              <circle cx={x} cy={yOf(d.b)} r={3.5} fill={colorB} stroke="white" strokeWidth={1.5} />
+              {d.a > 0 && <text x={x} y={yOf(d.a) - 7} textAnchor="middle" fontSize="8" fill={colorA}>{fmtShort(d.a)}</text>}
+              <text x={x} y={TOP + height + 18} textAnchor="middle" fontSize="10" fill="#94a3b8">{d.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export default function MetricsView({
   invoices, quotes, receipts, expenses, language, companySettings, onBack,
 }: MetricsViewProps) {
@@ -183,6 +242,7 @@ export default function MetricsView({
   });
   const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [previewUrl, setPreviewUrl] = useState<{ url: string; label: string } | null>(null);
+  const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
 
   void quotes;
 
@@ -532,21 +592,59 @@ export default function MetricsView({
         ))}
       </div>
 
-      {/* Monthly bar chart */}
+      {/* Monthly chart */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-        <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-widest mb-4 flex items-center gap-2">
-          <TrendingUp size={14} className="text-blue-500" />
-          {t('Revenue vs Expenses by Month', 'Receitas vs Despesas por Mês')}
-        </h3>
-        <BarChart
-          data={monthlyData}
-          colorA="#0369a1"
-          colorB="#ea580c"
-          labelA={t('Revenue', 'Receitas')}
-          labelB={t('Expenses', 'Despesas')}
-          peakIdx={peakIdx}
-          entryIdx={entryIdx}
-        />
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-widest flex items-center gap-2">
+            <TrendingUp size={14} className="text-blue-500" />
+            {t('Revenue vs Expenses by Month', 'Receitas vs Despesas por Mês')}
+          </h3>
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 gap-0.5">
+            <button
+              onClick={() => setChartType('bar')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                chartType === 'bar'
+                  ? 'bg-white dark:bg-slate-700 text-primary dark:text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <BarChart2 size={11} />
+              {t('Bar', 'Barras')}
+            </button>
+            <button
+              onClick={() => setChartType('line')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                chartType === 'line'
+                  ? 'bg-white dark:bg-slate-700 text-primary dark:text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <TrendingUp size={11} />
+              {t('Line', 'Linhas')}
+            </button>
+          </div>
+        </div>
+        {chartType === 'bar' ? (
+          <BarChart
+            data={monthlyData}
+            colorA="#0369a1"
+            colorB="#ea580c"
+            labelA={t('Revenue', 'Receitas')}
+            labelB={t('Expenses', 'Despesas')}
+            height={56}
+            peakIdx={peakIdx}
+            entryIdx={entryIdx}
+          />
+        ) : (
+          <LineChart
+            data={monthlyData}
+            colorA="#0369a1"
+            colorB="#ea580c"
+            labelA={t('Revenue', 'Receitas')}
+            labelB={t('Expenses', 'Despesas')}
+            height={56}
+          />
+        )}
       </div>
 
       {/* Pie charts: Expense Categories + Payment Methods — side by side */}

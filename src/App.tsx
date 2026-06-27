@@ -65,7 +65,6 @@ export default function App() {
   });
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [hasNewUfsa, setHasNewUfsa] = useState(false);
 
   // ─── ERP Data States (start empty – loaded from Supabase) ────────────────
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
@@ -312,23 +311,6 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // ─── UFSA badge background check ─────────────────────────────────────────
-  // Runs once on auth so the badge shows on any tab, not just when UfsaView mounts
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    supabase
-      .from('oportunidades')
-      .select('actualizado_em')
-      .order('actualizado_em', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) return;
-        const lastSeen = localStorage.getItem('ufsa_last_seen_ts') ?? '';
-        if (data.actualizado_em > lastSeen) setHasNewUfsa(true);
-      });
-  }, [isAuthenticated]);
 
   // ─── Preference persistence ───────────────────────────────────────────────
   useEffect(() => {
@@ -1159,7 +1141,6 @@ export default function App() {
           setActiveTab={navigateTo}
           language={language}
           setLanguage={setLanguage}
-          hasNewUfsa={hasNewUfsa}
           onLogout={async () => {
             if (confirm(language === 'en' ? 'Are you sure you want to log out?' : 'Tem a certeza que deseja terminar sessão?')) {
               await supabase.auth.signOut();
@@ -1175,9 +1156,17 @@ export default function App() {
           }}
         />
 
+        {/* UFSA: full-bleed webviewer — rendered outside padded main */}
+        {activeTab === 'ufsa' && (
+          <div className="flex flex-col flex-1 min-h-0">
+            <UfsaView />
+          </div>
+        )}
+
         {/* Central main page container */}
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 text-left h-full">
-            <div className="mx-auto w-full max-w-7xl">
+        {activeTab !== 'ufsa' && (
+        <main className="flex-1 px-3 py-4 sm:px-5 lg:px-6 text-left h-full">
+            <div className="mx-auto w-full max-w-[1440px]">
 
             {activeTab === 'dashboard' && (
               <DashboardView
@@ -1201,7 +1190,7 @@ export default function App() {
                 setStockItems={setStockItems}
                 language={language}
                 currency={currency}
-                onAddItem={() => setActiveModal('add_item')}
+                userId={currentUserId}
                 triggerToast={triggerToast}
                 searchQuery={searchQuery}
                 companySettings={companySettings}
@@ -1219,6 +1208,114 @@ export default function App() {
                 searchQuery={searchQuery}
                 onMarkAsPaid={handleMarkAsPaid}
                 companySettings={companySettings}
+                createPanel={
+                  <form onSubmit={handleCreateInvoice} className="p-4 space-y-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Client / Company' : 'Companhia / Cliente'}</label>
+                      <input type="text" required value={formInvoiceClient} onChange={e => setFormInvoiceClient(e.target.value)} placeholder="TechSolutions S.A."
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'NUIT (opt.)' : 'NUIT (opc.)'}</label>
+                        <input type="text" value={formInvoiceClientNuit} onChange={e => setFormInvoiceClientNuit(e.target.value)} placeholder="400261845"
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Status' : 'Estado'}</label>
+                        <select value={formInvoiceStatus} onChange={e => setFormInvoiceStatus(e.target.value as Invoice['status'])}
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold">
+                          <option value="Pending">{language === 'en' ? 'Pending' : 'Pendente'}</option>
+                          <option value="Paid">{language === 'en' ? 'Paid' : 'Pago'}</option>
+                          <option value="Overdue">{language === 'en' ? 'Overdue' : 'Vencido'}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Phone' : 'Telefone'}</label>
+                        <input type="tel" value={formInvoiceClientPhone} onChange={e => setFormInvoiceClientPhone(e.target.value)} placeholder="+258 84 000 0000"
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Email</label>
+                        <input type="email" value={formInvoiceClientEmail} onChange={e => setFormInvoiceClientEmail(e.target.value)} placeholder="cliente@empresa.co.mz"
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                      </div>
+                    </div>
+                    {companySettings.secondaryCompany && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Issuing Company' : 'Empresa Emissora'}</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(['primary', 'secondary'] as const).map(p => (
+                            <button key={p} type="button" onClick={() => setFormInvoiceCompanyProfile(p)}
+                              className={`px-2 py-1.5 rounded border text-xs font-semibold truncate transition-all ${formInvoiceCompanyProfile === p ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                              {p === 'primary' ? (companySettings.companyName || 'Principal') : (companySettings.secondaryCompany?.companyName || 'Secundária')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Description' : 'Descrição'}</label>
+                      <textarea value={formInvoiceDescription} onChange={e => setFormInvoiceDescription(e.target.value)} rows={1} placeholder={language === 'en' ? 'Service or product...' : 'Serviço ou produto...'}
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 resize-none placeholder:text-slate-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Line Items' : 'Itens'}</label>
+                        <button type="button" onClick={addInvoiceItem} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5">
+                          <Plus size={10} />Add
+                        </button>
+                      </div>
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                        <table className="w-full text-[10px]">
+                          <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                              <th className="text-left px-2 py-1 font-bold text-slate-500 uppercase">{language === 'en' ? 'Desc' : 'Desc'}</th>
+                              <th className="text-center px-1 py-1 font-bold text-slate-500 uppercase w-10">Qty</th>
+                              <th className="text-right px-1 py-1 font-bold text-slate-500 uppercase w-16">{language === 'en' ? 'Price' : 'Preço'}</th>
+                              <th className="text-right px-1 py-1 font-bold text-slate-500 uppercase w-14">Total</th>
+                              <th className="w-5"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {formInvoiceItems.map((it, idx) => (
+                              <tr key={idx}>
+                                <td className="px-2 py-1"><input type="text" value={it.description} onChange={e => updateInvoiceItem(idx, 'description', e.target.value)} placeholder="Item" className="w-full bg-transparent outline-none text-slate-900 dark:text-slate-100 text-[10px]" /></td>
+                                <td className="px-1 py-1"><input type="number" min="0" step="any" value={it.quantity} onChange={e => updateInvoiceItem(idx, 'quantity', parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none text-slate-900 dark:text-slate-100 text-[10px] text-center" /></td>
+                                <td className="px-1 py-1"><input type="number" min="0" step="any" value={it.unitPrice} onChange={e => updateInvoiceItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none text-slate-900 dark:text-slate-100 text-[10px] text-right" /></td>
+                                <td className="px-1 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{formatValue(it.quantity * it.unitPrice, 'MZN')}</td>
+                                <td className="px-1 py-1 text-center"><button type="button" onClick={() => removeInvoiceItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={10} /></button></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex flex-col items-end gap-0.5 mt-1 text-[10px]">
+                        <div className="flex gap-3"><span className="text-slate-500">Subtotal:</span><span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatValue(calcInvoiceSubtotal(), 'MZN')}</span></div>
+                        <div className="flex gap-3"><span className="text-slate-500">ISPC (3%):</span><span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatValue(calcInvoiceSubtotal() * 0.03, 'MZN')}</span></div>
+                        <div className="flex gap-3 border-t border-slate-200 dark:border-slate-700 pt-0.5"><span className="font-bold text-slate-700 dark:text-slate-300">Total:</span><span className="font-mono font-black text-red-600">{formatValue(calcInvoiceSubtotal() * 1.03, 'MZN')}</span></div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Due Date (opt.)' : 'Vencimento (opc.)'}</label>
+                        <input type="date" value={formInvoiceDueDate} onChange={e => setFormInvoiceDueDate(e.target.value)}
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Notes (opt.)' : 'Observações (opc.)'}</label>
+                        <textarea value={formInvoiceNotes} onChange={e => setFormInvoiceNotes(e.target.value)} rows={1}
+                          placeholder={language === 'en' ? 'Payment terms...' : 'Condições de pagamento...'}
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 resize-none placeholder:text-slate-400" />
+                      </div>
+                    </div>
+                    <button type="submit" className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer">
+                      {language === 'en' ? 'Create Invoice' : 'Criar Factura'}
+                    </button>
+                  </form>
+                }
               />
             )}
 
@@ -1233,6 +1330,96 @@ export default function App() {
                 searchQuery={searchQuery}
                 onApproveQuote={handleApproveQuote}
                 companySettings={companySettings}
+                createPanel={
+                  <form onSubmit={handleCreateQuote} className="p-4 space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Client / Company' : 'Cliente / Empresa'}</label>
+                      <input type="text" required value={formQuoteClient} onChange={e => setFormQuoteClient(e.target.value)} placeholder="Electricidade de Moçambique S.A."
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'NUIT (optional)' : 'NUIT (opcional)'}</label>
+                      <input type="text" value={formQuoteClientNuit} onChange={e => setFormQuoteClientNuit(e.target.value)} placeholder="400261845"
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Phone' : 'Telefone'}</label>
+                        <input type="tel" value={formQuoteClientPhone} onChange={e => setFormQuoteClientPhone(e.target.value)} placeholder="+258 84 000 0000"
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Email</label>
+                        <input type="email" value={formQuoteClientEmail} onChange={e => setFormQuoteClientEmail(e.target.value)} placeholder="cliente@empresa.co.mz"
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                      </div>
+                    </div>
+                    {companySettings.secondaryCompany && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Issuing Company' : 'Empresa Emissora'}</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(['primary', 'secondary'] as const).map(p => (
+                            <button key={p} type="button" onClick={() => setFormQuoteCompanyProfile(p)}
+                              className={`px-2 py-1.5 rounded border text-xs font-semibold truncate transition-all ${formQuoteCompanyProfile === p ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                              {p === 'primary' ? (companySettings.companyName || 'Principal') : (companySettings.secondaryCompany?.companyName || 'Secundária')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Line Items' : 'Itens'}</label>
+                        <button type="button" onClick={addQuoteItem} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5">
+                          <Plus size={10} />Add
+                        </button>
+                      </div>
+                      <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                        <table className="w-full text-[10px]">
+                          <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                              <th className="text-left px-2 py-1 font-bold text-slate-500 uppercase">{language === 'en' ? 'Desc' : 'Desc'}</th>
+                              <th className="text-center px-1 py-1 font-bold text-slate-500 uppercase w-10">Qty</th>
+                              <th className="text-right px-1 py-1 font-bold text-slate-500 uppercase w-16">{language === 'en' ? 'Price' : 'Preço'}</th>
+                              <th className="text-right px-1 py-1 font-bold text-slate-500 uppercase w-14">Total</th>
+                              <th className="w-5"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {formQuoteItems.map((it, idx) => (
+                              <tr key={idx}>
+                                <td className="px-2 py-1"><input type="text" value={it.description} onChange={e => updateQuoteItem(idx, 'description', e.target.value)} placeholder="Item" className="w-full bg-transparent outline-none text-slate-900 dark:text-slate-100 text-[10px]" /></td>
+                                <td className="px-1 py-1"><input type="number" min="0" step="any" value={it.quantity} onChange={e => updateQuoteItem(idx, 'quantity', parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none text-slate-900 dark:text-slate-100 text-[10px] text-center" /></td>
+                                <td className="px-1 py-1"><input type="number" min="0" step="any" value={it.unitPrice} onChange={e => updateQuoteItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none text-slate-900 dark:text-slate-100 text-[10px] text-right" /></td>
+                                <td className="px-1 py-1 text-right font-mono text-slate-700 dark:text-slate-300">{formatValue(it.quantity * it.unitPrice, 'MZN')}</td>
+                                <td className="px-1 py-1 text-center"><button type="button" onClick={() => removeQuoteItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={10} /></button></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex flex-col items-end gap-0.5 mt-1 text-[10px]">
+                        <div className="flex gap-3"><span className="text-slate-500">Subtotal:</span><span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatValue(calcQuoteSubtotal(), 'MZN')}</span></div>
+                        <div className="flex gap-3"><span className="text-slate-500">ISPC (3%):</span><span className="font-mono font-bold text-slate-800 dark:text-slate-200">{formatValue(calcQuoteSubtotal() * 0.03, 'MZN')}</span></div>
+                        <div className="flex gap-3 border-t border-slate-200 dark:border-slate-700 pt-0.5"><span className="font-bold text-slate-700 dark:text-slate-300">Total:</span><span className="font-mono font-black text-amber-700">{formatValue(calcQuoteSubtotal() * 1.03, 'MZN')}</span></div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Validity (days)' : 'Validade (dias)'}</label>
+                      <input type="number" min="1" value={formQuoteValidity} onChange={e => setFormQuoteValidity(e.target.value)} placeholder="15"
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Notes (opt.)' : 'Observações (opc.)'}</label>
+                      <textarea value={formQuoteNotes} onChange={e => setFormQuoteNotes(e.target.value)} rows={2}
+                        placeholder={language === 'en' ? 'Terms, conditions...' : 'Condições, observações...'}
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-slate-100 resize-none placeholder:text-slate-400" />
+                    </div>
+                    <button type="submit" className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer">
+                      {language === 'en' ? 'Create Proposal' : 'Gerar Proposta'}
+                    </button>
+                  </form>
+                }
               />
             )}
 
@@ -1245,6 +1432,82 @@ export default function App() {
                 currency={currency}
                 searchQuery={searchQuery}
                 companySettings={companySettings}
+                createPanel={
+                  <form onSubmit={handleCreateReceiptManual} className="p-4 space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Invoice Reference' : 'Referência da Factura'}</label>
+                      <select value={formReceiptInvoiceRef} onChange={e => {
+                        const val = e.target.value;
+                        setFormReceiptInvoiceRef(val);
+                        if (val) {
+                          const inv = invoices.find(i => i.invoiceNumber === val);
+                          if (inv) { setFormReceiptClient(inv.client); setFormReceiptAmount(String(inv.amount)); if (inv.companyProfileId) setFormReceiptCompanyProfile(inv.companyProfileId); }
+                        } else { setFormReceiptClient(''); setFormReceiptAmount(''); }
+                      }} className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none text-slate-900 dark:text-slate-100 font-semibold cursor-pointer">
+                        <option value="">{language === 'en' ? '— Pending invoice —' : '— Factura pendente —'}</option>
+                        {invoices.filter(i => i.status !== 'Paid').map(i => (
+                          <option key={i.id} value={i.invoiceNumber}>{i.invoiceNumber} · {i.client}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{language === 'en' ? 'Selecting auto-fills client and amount.' : 'Selecionar preenche cliente e valor.'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                        {language === 'en' ? 'Client *' : 'Cliente *'}
+                        {formReceiptClient && formReceiptInvoiceRef && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded">{language === 'en' ? 'auto' : 'auto'}</span>}
+                      </label>
+                      <input type="text" required value={formReceiptClient} onChange={e => setFormReceiptClient(e.target.value)} placeholder="TechSolutions S.A."
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                          {language === 'en' ? 'Amount *' : 'Valor *'}
+                          {formReceiptAmount && formReceiptInvoiceRef && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded">auto</span>}
+                        </label>
+                        <input type="number" required min="0.01" step="any" value={formReceiptAmount} onChange={e => setFormReceiptAmount(e.target.value)} placeholder="85000.00"
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Date' : 'Data'}</label>
+                        <input type="date" value={formReceiptDate} onChange={e => setFormReceiptDate(e.target.value)}
+                          className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Payment Method' : 'Método de Pagamento'}</label>
+                      <select value={formReceiptMethod} onChange={e => setFormReceiptMethod(e.target.value)}
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none cursor-pointer text-slate-900 dark:text-slate-100 font-semibold">
+                        <option value="Bank Transfer">{language === 'en' ? 'Bank Transfer' : 'Transferência Bancária'}</option>
+                        <option value="M-Pesa">M-Pesa</option>
+                        <option value="E-Mola">E-Mola</option>
+                        <option value="Cash">{language === 'en' ? 'Cash' : 'Numerário'}</option>
+                      </select>
+                    </div>
+                    {companySettings.secondaryCompany && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Issuing Company' : 'Empresa Emissora'}</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(['primary', 'secondary'] as const).map(p => (
+                            <button key={p} type="button" onClick={() => setFormReceiptCompanyProfile(p)}
+                              className={`px-2 py-1.5 rounded border text-xs font-semibold truncate transition-all ${formReceiptCompanyProfile === p ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                              {p === 'primary' ? (companySettings.companyName || 'Principal') : (companySettings.secondaryCompany?.companyName || 'Secundária')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{language === 'en' ? 'Notes (opt.)' : 'Observações (opc.)'}</label>
+                      <textarea value={formReceiptNotes} onChange={e => setFormReceiptNotes(e.target.value)} rows={2}
+                        placeholder={language === 'en' ? 'Payment notes...' : 'Notas de pagamento...'}
+                        className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-slate-100 resize-none placeholder:text-slate-400" />
+                    </div>
+                    <button type="submit" className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer">
+                      {language === 'en' ? 'Issue Receipt' : 'Emitir Recibo'}
+                    </button>
+                  </form>
+                }
               />
             )}
 
@@ -1293,13 +1556,6 @@ export default function App() {
                 onNewSale={() => setActiveModal('new_sale')}
                 onDeleteSale={handleDeleteSale}
                 searchQuery={searchQuery}
-              />
-            )}
-
-            {activeTab === 'ufsa' && (
-              <UfsaView
-                language={language}
-                onNewItems={setHasNewUfsa}
               />
             )}
 
@@ -1390,6 +1646,7 @@ export default function App() {
 
             </div>
           </main>
+        )}
         </div>
 
       {/* FIRST-SETUP WIZARD — rendered outside all tab/layout containers */}

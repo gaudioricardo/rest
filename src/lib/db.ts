@@ -175,6 +175,7 @@ export function mapStockItem(row: Record<string, unknown>): StockItem {
     stockLevel: level,
     maxStock: max,
     price: parseFloat(String(row.price)),
+    salePrice: row.sale_price != null ? parseFloat(String(row.sale_price)) : undefined,
     status,
     statusPt,
     warehouse: row.warehouse as string,
@@ -506,6 +507,7 @@ export async function createStockItem(payload: {
   stockLevel: number;
   maxStock: number;
   price: number;
+  salePrice?: number;
   warehouse: string;
   warehousePt: string;
 }): Promise<StockItem | null> {
@@ -521,14 +523,19 @@ export async function createStockItem(payload: {
         stock_level: payload.stockLevel,
         max_stock: payload.maxStock,
         price: payload.price,
+        sale_price: payload.salePrice ?? null,
         warehouse: payload.warehouse,
         warehouse_pt: payload.warehousePt,
       })
       .select()
       .single();
-    if (error || !data) return null;
+    if (error || !data) {
+      console.error('[createStockItem] Supabase error:', error?.message, error?.details, error?.hint);
+      return null;
+    }
     return mapStockItem(data);
-  } catch {
+  } catch (e) {
+    console.error('[createStockItem] Exception:', e);
     return null;
   }
 }

@@ -12,7 +12,6 @@ interface NavBarProps {
   language: Language;
   setLanguage: (lang: Language) => void;
   onLogout: () => void;
-  hasNewUfsa?: boolean;
 }
 
 const navItems = [
@@ -43,7 +42,7 @@ const activeClass   = 'text-primary border-primary font-semibold';
 const inactiveClass = 'text-primary/55 dark:text-slate-400 border-transparent hover:text-secondary hover:font-bold hover:border-secondary/40';
 
 export default function NavBar({
-  activeTab, setActiveTab, language, setLanguage, onLogout, hasNewUfsa = false,
+  activeTab, setActiveTab, language, setLanguage, onLogout,
 }: NavBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -97,9 +96,6 @@ export default function NavBar({
                     >
                       <Icon size={17} />
                       <span className="text-center leading-tight">{lbl}</span>
-                      {item.id === 'ufsa' && hasNewUfsa && !isActive && (
-                        <span className="absolute top-2 right-3 h-1.5 w-1.5 rounded-full bg-red-500" />
-                      )}
                     </button>
                   );
                 })}
@@ -151,16 +147,10 @@ export default function NavBar({
           <button
             onClick={() => setActiveTab('ufsa')}
             title={pt ? 'Concursos UFSA' : 'UFSA Public Tenders'}
-            className={[
-              'relative', baseBtn,
-              activeTab === 'ufsa' ? activeClass : inactiveClass,
-            ].join(' ')}
+            className={[baseBtn, activeTab === 'ufsa' ? activeClass : inactiveClass].join(' ')}
           >
             <Megaphone size={14} />
             <span className="hidden xl:inline">UFSA</span>
-            {hasNewUfsa && activeTab !== 'ufsa' && (
-              <span className="absolute top-2.5 right-1 h-1.5 w-1.5 rounded-full bg-red-500" />
-            )}
           </button>
 
           {/* Spacer */}
