@@ -85,7 +85,21 @@ function fmtMT(n: number): string {
 
 function logoImg(base64?: string, size = 90): string {
   if (!base64) return '';
-  return `<img src="${base64}" style="width:${size}px;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:6px;" crossorigin="anonymous" />`;
+  return `<img src="${base64}" style="max-width:${size}px;max-height:${size}px;width:auto;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:6px;display:block;" crossorigin="anonymous" />`;
+}
+
+function calcLogoDims(doc: jsPDF, base64: string, maxW: number, maxH: number): [number, number] {
+  try {
+    const props = doc.getImageProperties(base64);
+    const ratio = props.width / props.height;
+    if (ratio > maxW / maxH) {
+      return [maxW, maxW / ratio];
+    } else {
+      return [maxH * ratio, maxH];
+    }
+  } catch {
+    return [maxW, maxH];
+  }
 }
 
 function stampImg(base64?: string): string {
@@ -360,7 +374,7 @@ export async function generateQuotePDF(
           <!-- Logo -->
           <div style="width:14%;display:flex;align-items:center;justify-content:center;padding-top:4px;">
             ${settings.logoBase64
-              ? `<img src="${settings.logoBase64}" style="width:100%;max-width:110px;height:auto;object-fit:contain;border:1px solid #e0dfdd;background:#fff;padding:6px;border-radius:12px;" crossorigin="anonymous" />`
+              ? `<img src="${settings.logoBase64}" style="max-width:110px;max-height:90px;width:auto;height:auto;object-fit:contain;border:1px solid #e0dfdd;background:#fff;padding:6px;border-radius:12px;display:block;" crossorigin="anonymous" />`
               : ''}
           </div>
           <!-- Empresa -->
@@ -530,7 +544,7 @@ export async function generateReceiptPDF(
           <!-- Empresa (esquerda) -->
           <div style="display:flex;gap:12px;align-items:flex-start;width:60%;">
             ${settings.logoBase64
-              ? `<img src="${settings.logoBase64}" style="width:90px;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:8px;" crossorigin="anonymous" />`
+              ? `<img src="${settings.logoBase64}" style="max-width:90px;max-height:72px;width:auto;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:8px;display:block;" crossorigin="anonymous" />`
               : ''}
             <div>
               <div style="font-weight:bold;font-size:11pt;text-transform:uppercase;margin-bottom:4px;letter-spacing:0.5px;line-height:1.2;color:#111;">${settings.companyName || '[Empresa]'}</div>
@@ -685,7 +699,8 @@ export function generateFinancialReportPDF(
   if (settings.logoBase64) {
     try {
       const fmt = settings.logoBase64.startsWith('data:image/jpeg') || settings.logoBase64.startsWith('data:image/jpg') ? 'JPEG' : 'PNG';
-      doc.addImage(settings.logoBase64, fmt, 14, 6, 24, 24);
+      const [lw, lh] = calcLogoDims(doc, settings.logoBase64, 24, 24);
+      doc.addImage(settings.logoBase64, fmt, 14, 6, lw, lh);
     } catch { /* skip on unsupported format */ }
   }
 
@@ -821,7 +836,7 @@ export function generateStockPDF(
 
   // ── Company header ──────────────────────────────────────────────────────────
   if (settings.logoBase64) {
-    try { doc.addImage(settings.logoBase64, 'PNG', 14, y, 20, 20); } catch { /* skip bad logo */ }
+    try { const [lw, lh] = calcLogoDims(doc, settings.logoBase64, 20, 20); doc.addImage(settings.logoBase64, 'PNG', 14, y, lw, lh); } catch { /* skip bad logo */ }
     doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
     doc.text(settings.companyName || '—', 38, y + 7);
     doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
@@ -951,6 +966,228 @@ export function generateStockPDF(
   doc.save(`Stock_Report_${now.toISOString().slice(0, 10)}.pdf`);
 }
 
+// ─── STOCK ROI / PROFITABILITY REPORT PDF ────────────────────────────────────
+
+export function generateStockROIPDF(
+  items: StockItem[],
+  sales: GeneralSale[],
+  language: Language,
+  settings: CompanySettings,
+  dateFrom?: string,
+  dateTo?: string
+): void {
+  const doc = new jsPDF('landscape', 'mm', 'a4');
+  const pageW = doc.internal.pageSize.getWidth();
+  const now = new Date();
+  const isEn = language === 'en';
+  const locale = isEn ? 'en-US' : 'pt-MZ';
+
+  const fmtV = (v: number) => formatValue(v, 'MZN');
+  const fmtIso = (iso: string) =>
+    new Date(iso + 'T00:00:00').toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  let y = 14;
+
+  // ── Company header ──────────────────────────────────────────────────────────
+  if (settings.logoBase64) {
+    try { const [lw, lh] = calcLogoDims(doc, settings.logoBase64, 18, 18); doc.addImage(settings.logoBase64, 'PNG', 14, y, lw, lh); } catch { /* skip */ }
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(settings.companyName || '—', 36, y + 6);
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
+    const meta = [settings.address, settings.city ? settings.city + ' — Moçambique' : '', 'NUIT: ' + (settings.nuit || '—'), settings.phone || ''].filter(Boolean);
+    doc.text(meta.join('  |  '), 36, y + 12);
+    y += 26;
+  } else {
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(settings.companyName || '—', 14, y + 6);
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);
+    const meta = [settings.address, settings.city ? settings.city + ' — Moçambique' : '', 'NUIT: ' + (settings.nuit || '—'), settings.phone || ''].filter(Boolean);
+    doc.text(meta.join('  |  '), 14, y + 12);
+    y += 22;
+  }
+
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, y, pageW - 14, y);
+  y += 7;
+
+  // ── Title ───────────────────────────────────────────────────────────────────
+  doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(12, 28, 72);
+  doc.text(isEn ? 'STOCK PROFITABILITY REPORT' : 'RELATÓRIO DE LUCRATIVIDADE DO STOCK', 14, y);
+
+  const periodLabel = (dateFrom || dateTo)
+    ? (isEn ? 'Period: ' : 'Período: ') + (dateFrom ? fmtIso(dateFrom) : '—') + ' → ' + (dateTo ? fmtIso(dateTo) : '—')
+    : (isEn ? 'Generated: ' : 'Gerado em: ') + now.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100);
+  doc.text(periodLabel, pageW - 14, y, { align: 'right' });
+  y += 9;
+
+  // ── Per-item ROI calculation ────────────────────────────────────────────────
+  interface RowData {
+    name: string; sku: string; costPrice: number; salePrice: number | null;
+    stockQty: number; unitsSold: number; revenueRealized: number;
+    cogsSold: number; actualProfit: number; potentialProfit: number;
+    marginPct: number | null; profitable: boolean | null;
+  }
+
+  const rows: RowData[] = items.map(item => {
+    const salePriceVal = item.salePrice ?? null;
+    const skuSales = sales.filter(s => s.sku === item.sku || s.productId === item.id);
+    const unitsSold = skuSales.reduce((s, sv) => s + sv.quantity, 0);
+    const revenueRealized = skuSales.reduce((s, sv) => s + sv.totalAmount, 0);
+    const cogsSold = item.price * unitsSold;
+    const actualProfit = revenueRealized - cogsSold;
+    const potentialProfit = salePriceVal !== null ? (salePriceVal - item.price) * item.stockLevel : 0;
+    const marginPct = salePriceVal !== null && item.price > 0
+      ? ((salePriceVal - item.price) / item.price) * 100
+      : null;
+    const profitable = unitsSold > 0 ? actualProfit > 0 : (marginPct !== null ? marginPct > 0 : null);
+    return { name: item.name, sku: item.sku, costPrice: item.price, salePrice: salePriceVal, stockQty: item.stockLevel, unitsSold, revenueRealized, cogsSold, actualProfit, potentialProfit, marginPct, profitable };
+  });
+
+  // ── Summary KPIs ────────────────────────────────────────────────────────────
+  const totalInvested = rows.reduce((s, r) => s + r.costPrice * r.stockQty, 0);
+  const totalRevenue = rows.reduce((s, r) => s + r.revenueRealized, 0);
+  const totalCogs = rows.reduce((s, r) => s + r.cogsSold, 0);
+  const totalProfit = totalRevenue - totalCogs;
+  const totalPotential = rows.reduce((s, r) => s + r.potentialProfit, 0);
+  const overallMargin = totalCogs > 0 ? (totalProfit / totalCogs) * 100 : 0;
+  const profitableCount = rows.filter(r => r.profitable === true).length;
+
+  const kpis: { label: string; value: string; color?: [number, number, number] }[] = [
+    { label: isEn ? 'Items Analyzed' : 'Artigos Analisados', value: String(rows.length) },
+    { label: isEn ? 'Stock Invested' : 'Investimento Stock', value: fmtV(totalInvested), color: [12, 28, 72] },
+    { label: isEn ? 'Revenue Realized' : 'Receita Realizada', value: fmtV(totalRevenue), color: [22, 163, 74] },
+    { label: isEn ? 'Actual Profit' : 'Lucro Realizado', value: fmtV(totalProfit), color: totalProfit >= 0 ? [22, 163, 74] : [220, 38, 38] },
+    { label: isEn ? 'Potential Profit' : 'Lucro Potencial', value: fmtV(totalPotential), color: [99, 102, 241] },
+    { label: isEn ? 'Overall Margin' : 'Margem Global', value: overallMargin.toFixed(1) + '%', color: overallMargin >= 0 ? [22, 163, 74] : [220, 38, 38] },
+    { label: isEn ? 'Profitable Items' : 'Artigos Lucrativos', value: `${profitableCount}/${rows.length}`, color: [22, 163, 74] },
+  ];
+
+  const kpiW = (pageW - 28) / kpis.length;
+  kpis.forEach((kpi, idx) => {
+    const x = 14 + idx * kpiW;
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(x, y, kpiW - 2, 16, 2, 2, 'FD');
+    doc.setFontSize(5.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+    doc.text(kpi.label.toUpperCase(), x + (kpiW - 2) / 2, y + 5, { align: 'center' });
+    const [r, g, b] = kpi.color ?? [15, 23, 42];
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(r, g, b);
+    doc.text(kpi.value, x + (kpiW - 2) / 2, y + 12, { align: 'center' });
+  });
+  y += 21;
+
+  // ── Item-level table ────────────────────────────────────────────────────────
+  const head = isEn
+    ? [['Product', 'SKU', 'Cost', 'Sale Price', 'Stock Qty', 'Units Sold', 'Revenue', 'COGS', 'Actual Profit', 'Margin', 'Verdict']]
+    : [['Produto', 'SKU', 'Preço Compra', 'Preço Venda', 'Stock Atual', 'Unid. Vendidas', 'Receita', 'Custo Vendido', 'Lucro Real', 'Margem', 'Veredicto']];
+
+  const body = rows.map(r => [
+    r.name,
+    r.sku,
+    fmtV(r.costPrice),
+    r.salePrice !== null ? fmtV(r.salePrice) : '—',
+    r.stockQty.toString(),
+    r.unitsSold.toString(),
+    fmtV(r.revenueRealized),
+    fmtV(r.cogsSold),
+    fmtV(r.actualProfit),
+    r.marginPct !== null ? r.marginPct.toFixed(1) + '%' : '—',
+    r.profitable === true ? (isEn ? 'Profitable' : 'Lucrativo') : r.profitable === false ? (isEn ? 'Loss' : 'Prejuízo') : '—',
+  ]);
+
+  autoTable(doc, {
+    startY: y,
+    head,
+    body,
+    theme: 'striped',
+    headStyles: { fillColor: [12, 28, 72], textColor: 255, fontStyle: 'bold', fontSize: 7, halign: 'center' },
+    bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 38 },
+      1: { cellWidth: 18, halign: 'center' },
+      2: { cellWidth: 22, halign: 'right' },
+      3: { cellWidth: 22, halign: 'right' },
+      4: { cellWidth: 16, halign: 'right' },
+      5: { cellWidth: 18, halign: 'right' },
+      6: { cellWidth: 26, halign: 'right' },
+      7: { cellWidth: 26, halign: 'right' },
+      8: { cellWidth: 26, halign: 'right' },
+      9: { cellWidth: 16, halign: 'right' },
+      10: { cellWidth: 22, halign: 'center' },
+    },
+    didParseCell: (data) => {
+      if (data.section !== 'body') return;
+      if (data.column.index === 8) {
+        const val = parseFloat((data.cell.raw as string).replace(/[^0-9.-]/g, ''));
+        if (!isNaN(val)) {
+          data.cell.styles.textColor = val >= 0 ? [22, 163, 74] : [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+      if (data.column.index === 9) {
+        const raw = data.cell.raw as string;
+        if (raw !== '—') {
+          const val = parseFloat(raw);
+          data.cell.styles.textColor = val >= 0 ? [22, 163, 74] : [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+      if (data.column.index === 10) {
+        const raw = data.cell.raw as string;
+        if (raw === 'Profitable' || raw === 'Lucrativo') {
+          data.cell.styles.textColor = [22, 163, 74]; data.cell.styles.fontStyle = 'bold';
+        } else if (raw === 'Loss' || raw === 'Prejuízo') {
+          data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    },
+    margin: { left: 14, right: 14 },
+    didDrawPage: (data) => {
+      const pN = data.pageNumber;
+      const ph = doc.internal.pageSize.getHeight();
+      doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 150);
+      doc.text(settings.companyName || '', 14, ph - 8);
+      doc.text(`${isEn ? 'Page' : 'Pág.'} ${pN}`, pageW - 14, ph - 8, { align: 'right' });
+    },
+  });
+
+  // ── Conclusion block ────────────────────────────────────────────────────────
+  const finalY = (doc as any).lastAutoTable?.finalY ?? 180;
+  const conclusionY = finalY + 8;
+  const ph = doc.internal.pageSize.getHeight();
+
+  if (conclusionY + 32 > ph) doc.addPage();
+
+  const cy = conclusionY + 32 > ph ? 14 : conclusionY;
+
+  const overallVerdict = totalProfit >= 0
+    ? (isEn ? 'OVERALL PROFITABLE' : 'GLOBALMENTE LUCRATIVO')
+    : (isEn ? 'OVERALL LOSS' : 'PREJUÍZO GLOBAL');
+  const verdictColor: [number, number, number] = totalProfit >= 0 ? [22, 163, 74] : [220, 38, 38];
+  const verdictBg: [number, number, number] = totalProfit >= 0 ? [240, 253, 244] : [254, 242, 242];
+
+  doc.setFillColor(...verdictBg); doc.setDrawColor(...verdictColor);
+  doc.roundedRect(14, cy, pageW - 28, 28, 3, 3, 'FD');
+
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(...verdictColor);
+  doc.text((isEn ? 'CONCLUSION: ' : 'CONCLUSÃO: ') + overallVerdict, 20, cy + 8);
+
+  doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(50, 50, 50);
+  const summary = isEn
+    ? `Total invested in stock: ${fmtV(totalInvested)}   |   Total revenue from sales: ${fmtV(totalRevenue)}   |   Total profit: ${fmtV(totalProfit)}   |   Overall margin: ${overallMargin.toFixed(1)}%`
+    : `Total investido em stock: ${fmtV(totalInvested)}   |   Receita total de vendas: ${fmtV(totalRevenue)}   |   Lucro total: ${fmtV(totalProfit)}   |   Margem global: ${overallMargin.toFixed(1)}%`;
+  doc.text(summary, 20, cy + 16);
+
+  const itemVerdict = isEn
+    ? `${profitableCount} of ${rows.length} items are profitable   |   Potential profit if all stock sold: ${fmtV(totalPotential)}`
+    : `${profitableCount} de ${rows.length} artigos são lucrativos   |   Lucro potencial se todo o stock for vendido: ${fmtV(totalPotential)}`;
+  doc.text(itemVerdict, 20, cy + 22);
+
+  doc.save(`Stock_ROI_Report_${now.toISOString().slice(0, 10)}.pdf`);
+}
+
 // ─── GENERAL SALES REPORT PDF (portrait A4) ──────────────────────────────────
 
 export function generateGeneralSalesPDF(
@@ -971,7 +1208,7 @@ export function generateGeneralSalesPDF(
   let y = 14;
 
   if (settings.logoBase64) {
-    try { doc.addImage(settings.logoBase64, 'PNG', 14, y, 20, 20); } catch { /* skip */ }
+    try { const [lw, lh] = calcLogoDims(doc, settings.logoBase64, 20, 20); doc.addImage(settings.logoBase64, 'PNG', 14, y, lw, lh); } catch { /* skip */ }
     doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(15, 23, 42);
     doc.text(settings.companyName || '—', 38, y + 7);
     doc.setFontSize(7.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(80, 80, 80);

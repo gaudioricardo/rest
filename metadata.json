@@ -1,6 +1,0 @@
-{
-  "name": "InvStock ERP",
-  "description": "An Enterprise Resource Planning and Stock Management Dashboard featuring full multi-language capabilities, invoice creation, stock control, and interactive financial monitoring.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

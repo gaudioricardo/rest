@@ -1194,6 +1194,7 @@ export default function App() {
                 triggerToast={triggerToast}
                 searchQuery={searchQuery}
                 companySettings={companySettings}
+                generalSales={generalSales}
               />
             )}
 

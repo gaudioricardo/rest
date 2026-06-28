@@ -7,6 +7,7 @@ export interface StockItem {
   stockLevel: number;
   maxStock: number;
   price: number;
+  salePrice?: number;
   status: 'In Stock' | 'Low Stock' | 'Out of Stock';
   statusPt: 'Em Stock' | 'Stock Baixo' | 'Sem Stock';
   warehouse: string;

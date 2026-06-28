@@ -78,7 +78,7 @@ function amountToWordsPt(amount: number): string {
 
 function logoImg(base64?: string, size = 90): string {
   if (!base64) return '';
-  return `<img src="${base64}" style="width:${size}px;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:6px;" />`;
+  return `<img src="${base64}" style="max-width:${size}px;max-height:${size}px;width:auto;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:6px;display:block;" />`;
 }
 
 function stampImg(base64?: string): string {
@@ -292,7 +292,7 @@ export const generateQuotePdf = async (
     </div>
     <div style="display:flex;gap:15px;margin-bottom:15px;align-items:flex-start;">
       <div style="width:14%;display:flex;align-items:center;justify-content:center;">
-        ${co.logoBase64 ? `<img src="${co.logoBase64}" style="width:100%;max-width:110px;height:auto;object-fit:contain;border:1px solid #e0dfdd;background:#fff;padding:6px;border-radius:12px;" />` : ''}
+        ${co.logoBase64 ? `<img src="${co.logoBase64}" style="max-width:110px;max-height:90px;width:auto;height:auto;object-fit:contain;border:1px solid #e0dfdd;background:#fff;padding:6px;border-radius:12px;display:block;" />` : ''}
       </div>
       <div style="width:31%;border:2px solid #000;border-radius:8px;padding:12px;text-align:center;background:#fafafa;">
         <div style="font-weight:900;font-size:13px;text-transform:uppercase;margin-bottom:6px;color:#000;line-height:1.2;">${co.companyName || '[Empresa]'}</div>
@@ -427,7 +427,7 @@ export const generateReceiptPdf = async (
 
     <div style="display:flex;width:100%;gap:16px;align-items:flex-start;margin-bottom:16px;">
       <div style="display:flex;gap:12px;align-items:flex-start;width:60%;">
-        ${co.logoBase64 ? `<img src="${co.logoBase64}" style="width:90px;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:8px;" />` : ''}
+        ${co.logoBase64 ? `<img src="${co.logoBase64}" style="max-width:90px;max-height:72px;width:auto;height:auto;object-fit:contain;border:1px solid #e0dfdd;padding:4px;background:#fff;border-radius:8px;display:block;" />` : ''}
         <div>
           <div style="font-weight:bold;font-size:11pt;text-transform:uppercase;margin-bottom:4px;letter-spacing:0.5px;line-height:1.2;">${co.companyName || '[Empresa]'}</div>
           <div style="font-size:8.5pt;line-height:1.5;color:#333;">
@@ -668,7 +668,7 @@ export const generateFilteredReportPdf = async (
     <td style="color:${sc(e.status)};font-weight:bold;">${e.statusPt}</td></tr>`).join('');
 
   const logoHtml = settings.logoBase64
-    ? `<img src="${settings.logoBase64}" style="width:54px;height:54px;object-fit:contain;border-radius:8px;border:1px solid #e0dfdd;background:#fff;padding:3px;" />`
+    ? `<img src="${settings.logoBase64}" style="max-width:60px;max-height:50px;width:auto;height:auto;object-fit:contain;border-radius:8px;border:1px solid #e0dfdd;background:#fff;padding:3px;display:block;" />`
     : '';
 
   const html = `<!DOCTYPE html>
@@ -835,7 +835,7 @@ export const generateStockPdf = async (
 </head>
 <body>
   <div class="header">
-    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" style="width:60px;height:auto;object-fit:contain;border-radius:4px;" />` : ''}
+    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" style="max-width:60px;max-height:48px;width:auto;height:auto;object-fit:contain;border-radius:4px;display:block;" />` : ''}
     <div>
       <div class="company-name">${settings.companyName || '—'}</div>
       <div class="company-meta">
@@ -902,6 +902,185 @@ export const generateStockPdf = async (
   return uri;
 };
 
+// ─── STOCK ROI / PROFITABILITY PDF ───────────────────────────────────────────
+
+export const generateStockROIPdf = async (
+  items: StockItem[],
+  sales: GeneralSale[],
+  settings: CompanySettings,
+  language: 'pt' | 'en'
+): Promise<string> => {
+  const isEn = language === 'en';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(isEn ? 'en-US' : 'pt-MZ', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  // Per-item calculations
+  const rows = items.map(item => {
+    const salePriceVal = item.salePrice ?? null;
+    const skuSales = sales.filter(s => s.sku === item.sku || s.productId === item.id);
+    const unitsSold = skuSales.reduce((s, sv) => s + sv.quantity, 0);
+    const revenueRealized = skuSales.reduce((s, sv) => s + sv.totalAmount, 0);
+    const cogsSold = item.price * unitsSold;
+    const actualProfit = revenueRealized - cogsSold;
+    const potentialProfit = salePriceVal !== null ? (salePriceVal - item.price) * item.stockLevel : 0;
+    const marginPct = salePriceVal !== null && item.price > 0
+      ? ((salePriceVal - item.price) / item.price) * 100
+      : null;
+    const profitable = unitsSold > 0 ? actualProfit > 0 : (marginPct !== null ? marginPct > 0 : null);
+    return { item, salePriceVal, unitsSold, revenueRealized, cogsSold, actualProfit, potentialProfit, marginPct, profitable };
+  });
+
+  // Summary totals
+  const totalInvested = rows.reduce((s, r) => s + r.item.price * r.item.stockLevel, 0);
+  const totalRevenue = rows.reduce((s, r) => s + r.revenueRealized, 0);
+  const totalCogs = rows.reduce((s, r) => s + r.cogsSold, 0);
+  const totalProfit = totalRevenue - totalCogs;
+  const totalPotential = rows.reduce((s, r) => s + r.potentialProfit, 0);
+  const overallMargin = totalCogs > 0 ? (totalProfit / totalCogs) * 100 : 0;
+  const profitableCount = rows.filter(r => r.profitable === true).length;
+  const isOverallProfitable = totalProfit >= 0;
+
+  const tableRows = rows.map(r => {
+    const verdictColor = r.profitable === true ? '#16a34a' : r.profitable === false ? '#dc2626' : '#64748b';
+    const verdictLabel = r.profitable === true
+      ? (isEn ? 'Profitable' : 'Lucrativo')
+      : r.profitable === false
+        ? (isEn ? 'Loss' : 'Prejuízo')
+        : '—';
+    const profitColor = r.actualProfit >= 0 ? '#16a34a' : '#dc2626';
+    return `
+      <tr>
+        <td>${r.item.name}<br><span style="font-size:8px;color:#94a3b8;font-family:monospace;">${r.item.sku}</span></td>
+        <td style="text-align:right;">${fmtMT(r.item.price)}</td>
+        <td style="text-align:right;">${r.salePriceVal !== null ? fmtMT(r.salePriceVal) : '—'}</td>
+        <td style="text-align:right;">${r.item.stockLevel}</td>
+        <td style="text-align:right;">${r.unitsSold}</td>
+        <td style="text-align:right;">${fmtMT(r.revenueRealized)}</td>
+        <td style="text-align:right;">${fmtMT(r.cogsSold)}</td>
+        <td style="text-align:right;font-weight:bold;color:${profitColor};">${fmtMT(r.actualProfit)}</td>
+        <td style="text-align:right;">${r.marginPct !== null ? r.marginPct.toFixed(1) + '%' : '—'}</td>
+        <td style="text-align:center;font-weight:bold;color:${verdictColor};">${verdictLabel}</td>
+      </tr>`;
+  }).join('');
+
+  const conclusionBg = isOverallProfitable ? '#f0fdf4' : '#fef2f2';
+  const conclusionBorder = isOverallProfitable ? '#16a34a' : '#dc2626';
+  const conclusionColor = isOverallProfitable ? '#15803d' : '#b91c1c';
+  const overallVerdictLabel = isOverallProfitable
+    ? (isEn ? 'OVERALL PROFITABLE' : 'GLOBALMENTE LUCRATIVO')
+    : (isEn ? 'OVERALL LOSS' : 'PREJUÍZO GLOBAL');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; padding: 20px; font-size: 10px; }
+    .header { display: flex; align-items: flex-start; gap: 12px; border-bottom: 2px solid #0c1c48; padding-bottom: 10px; margin-bottom: 12px; }
+    .company-name { font-size: 14px; font-weight: bold; text-transform: uppercase; color: #0c1c48; margin-bottom: 3px; }
+    .company-meta { font-size: 8px; color: #64748b; line-height: 1.6; }
+    .report-title { font-size: 16px; font-weight: bold; color: #0c1c48; text-transform: uppercase; margin-bottom: 3px; }
+    .report-date { font-size: 8px; color: #94a3b8; margin-bottom: 12px; }
+    .kpis { display: flex; gap: 5px; margin-bottom: 14px; flex-wrap: wrap; }
+    .kpi { flex: 1; min-width: 80px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 4px; text-align: center; }
+    .kpi-label { font-size: 6.5px; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+    .kpi-value { font-size: 11px; font-weight: bold; color: #0c1c48; }
+    table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
+    thead tr { background: #0c1c48; }
+    th { color: #fff; font-size: 7.5px; text-align: left; padding: 6px 5px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; }
+    td { padding: 6px 5px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .conclusion { margin-top: 16px; border: 1.5px solid ${conclusionBorder}; background: ${conclusionBg}; border-radius: 6px; padding: 12px 16px; }
+    .conclusion-title { font-size: 11px; font-weight: bold; color: ${conclusionColor}; margin-bottom: 6px; }
+    .conclusion-line { font-size: 8px; color: #374151; line-height: 1.8; }
+    .footer { margin-top: 16px; font-size: 7.5px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 7px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" style="max-width:52px;max-height:42px;width:auto;height:auto;object-fit:contain;border-radius:4px;display:block;" />` : ''}
+    <div>
+      <div class="company-name">${settings.companyName || '—'}</div>
+      <div class="company-meta">
+        ${settings.address ? settings.address + (settings.city ? ', ' + settings.city : '') + '<br>' : ''}
+        NUIT: ${settings.nuit || '—'}${settings.phone ? ' · Tel: ' + settings.phone : ''}
+      </div>
+    </div>
+  </div>
+
+  <div class="report-title">${isEn ? 'Stock Profitability Report' : 'Relatório de Lucratividade do Stock'}</div>
+  <div class="report-date">${isEn ? 'Generated: ' : 'Gerado em: '}${dateStr} · ${items.length} ${isEn ? 'items analyzed' : 'artigos analisados'}</div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Stock Invested' : 'Investimento'}</div>
+      <div class="kpi-value" style="font-size:9px;">${fmtMT(totalInvested)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Revenue' : 'Receita'}</div>
+      <div class="kpi-value" style="color:#16a34a;font-size:9px;">${fmtMT(totalRevenue)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Actual Profit' : 'Lucro Real'}</div>
+      <div class="kpi-value" style="color:${isOverallProfitable ? '#16a34a' : '#dc2626'};font-size:9px;">${fmtMT(totalProfit)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Potential Profit' : 'Lucro Potencial'}</div>
+      <div class="kpi-value" style="color:#6366f1;font-size:9px;">${fmtMT(totalPotential)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Margin' : 'Margem'}</div>
+      <div class="kpi-value" style="color:${isOverallProfitable ? '#16a34a' : '#dc2626'};">${overallMargin.toFixed(1)}%</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">${isEn ? 'Profitable' : 'Lucrativos'}</div>
+      <div class="kpi-value" style="color:#16a34a;">${profitableCount}/${items.length}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>${isEn ? 'Product / SKU' : 'Produto / SKU'}</th>
+        <th style="text-align:right;">${isEn ? 'Cost' : 'Compra'}</th>
+        <th style="text-align:right;">${isEn ? 'Sale Price' : 'Venda'}</th>
+        <th style="text-align:right;">${isEn ? 'Stock' : 'Stock'}</th>
+        <th style="text-align:right;">${isEn ? 'Sold' : 'Vendido'}</th>
+        <th style="text-align:right;">${isEn ? 'Revenue' : 'Receita'}</th>
+        <th style="text-align:right;">${isEn ? 'COGS' : 'Custo Vend.'}</th>
+        <th style="text-align:right;">${isEn ? 'Profit' : 'Lucro'}</th>
+        <th style="text-align:right;">${isEn ? 'Margin' : 'Margem'}</th>
+        <th style="text-align:center;">${isEn ? 'Verdict' : 'Veredicto'}</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+    </tbody>
+  </table>
+
+  <div class="conclusion">
+    <div class="conclusion-title">&#x2192; ${isEn ? 'Conclusion: ' : 'Conclusão: '}${overallVerdictLabel}</div>
+    <div class="conclusion-line">
+      ${isEn ? 'Total invested in stock' : 'Total investido em stock'}: <strong>${fmtMT(totalInvested)}</strong> &nbsp;|&nbsp;
+      ${isEn ? 'Total sales revenue' : 'Receita total de vendas'}: <strong>${fmtMT(totalRevenue)}</strong> &nbsp;|&nbsp;
+      ${isEn ? 'Total profit/loss' : 'Lucro/Prejuízo total'}: <strong style="color:${conclusionColor};">${fmtMT(totalProfit)}</strong>
+    </div>
+    <div class="conclusion-line">
+      ${isEn ? 'Overall margin' : 'Margem global'}: <strong style="color:${conclusionColor};">${overallMargin.toFixed(1)}%</strong> &nbsp;|&nbsp;
+      ${isEn ? 'Potential profit if all stock sold' : 'Lucro potencial se todo o stock for vendido'}: <strong style="color:#6366f1;">${fmtMT(totalPotential)}</strong> &nbsp;|&nbsp;
+      ${profitableCount} ${isEn ? 'of' : 'de'} ${items.length} ${isEn ? 'items are profitable' : 'artigos são lucrativos'}
+    </div>
+  </div>
+
+  <div class="footer">${settings.companyName} · NUIT: ${settings.nuit} · ${isEn ? 'Generated by' : 'Gerado por'} Rest ERP · ${now.toLocaleString()}</div>
+</body>
+</html>`;
+
+  const { uri } = await Print.printToFileAsync({ html, base64: false });
+  return uri;
+};
+
 // ─── GENERAL SALES PDF ───────────────────────────────────────────────────────
 
 export const generateGeneralSalesPdf = async (
@@ -958,7 +1137,7 @@ export const generateGeneralSalesPdf = async (
 </head>
 <body>
   <div class="header">
-    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" style="width:60px;height:auto;object-fit:contain;border-radius:4px;" />` : ''}
+    ${settings.logoBase64 ? `<img src="${settings.logoBase64}" style="max-width:60px;max-height:48px;width:auto;height:auto;object-fit:contain;border-radius:4px;display:block;" />` : ''}
     <div>
       <div class="company-name">${settings.companyName || '—'}</div>
       <div class="company-meta">NUIT: ${settings.nuit || '—'}${settings.phone ? ' · Tel: ' + settings.phone : ''}</div>

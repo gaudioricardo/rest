@@ -19,12 +19,13 @@ import {
   TrendingUp,
   PackagePlus,
   Info,
+  BarChart2,
 } from 'lucide-react';
-import { StockItem, Language, Currency, CompanySettings } from '../types';
+import { StockItem, Language, Currency, CompanySettings, GeneralSale } from '../types';
 import { formatValue } from '../data';
 import * as db from '../lib/db';
 import DeleteConfirmModal from './DeleteConfirmModal';
-import { generateStockPDF } from '../lib/pdf';
+import { generateStockPDF, generateStockROIPDF } from '../lib/pdf';
 
 interface StockViewProps {
   stockItems: StockItem[];
@@ -35,6 +36,7 @@ interface StockViewProps {
   triggerToast: (title: string, titlePt: string, desc: string, descPt: string, type: 'success' | 'info' | 'error') => void;
   searchQuery: string;
   companySettings: CompanySettings;
+  generalSales: GeneralSale[];
 }
 
 const CATEGORY_PT_MAP: Record<string, string> = {
@@ -57,6 +59,7 @@ export default function StockView({
   triggerToast,
   searchQuery,
   companySettings,
+  generalSales,
 }: StockViewProps) {
   const pt = language === 'pt';
 
@@ -324,6 +327,16 @@ export default function StockView({
                   >
                     <FileCheck size={14} className="text-red-500" />
                     <span>{pt ? 'Exportar para PDF' : 'Export to PDF'}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowExportDropdown(false);
+                      generateStockROIPDF(filteredItems, generalSales, language, companySettings, dateFrom || undefined, dateTo || undefined);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-t border-slate-100 dark:border-slate-800"
+                  >
+                    <BarChart2 size={14} className="text-emerald-600" />
+                    <span>{pt ? 'Relatório de Lucratividade' : 'Profitability Report'}</span>
                   </button>
                 </div>
               )}

@@ -409,6 +409,7 @@ const mapStock = (row: any): StockItem => {
     stockLevel: row.stock_level ?? 0,
     maxStock: row.max_stock ?? 0,
     price: parseFloat(row.price) || 0,
+    salePrice: row.sale_price ? parseFloat(row.sale_price) : undefined,
     status,
     statusPt,
     warehouse: row.warehouse ?? '',

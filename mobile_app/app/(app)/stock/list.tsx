@@ -12,18 +12,19 @@ import { Badge, getStockVariant } from '../../../components/ui/Badge';
 import { DeleteModal } from '../../../components/ui/DeleteModal';
 import { useToast } from '../../../components/ui/ToastContainer';
 import { deleteStockItem } from '../../../lib/db';
-import { generateStockPdf, sharePdf } from '../../../lib/pdf';
+import { generateStockPdf, generateStockROIPdf, sharePdf } from '../../../lib/pdf';
 
 export default function StockListScreen() {
   const router = useRouter();
   const { showToast } = useToast();
   const { language, darkMode, company } = useSettingsStore();
   const { userId } = useAuthStore();
-  const { stockItems, loadStock } = useDataStore();
+  const { stockItems, generalSales, loadStock } = useDataStore();
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingRoi, setExportingRoi] = useState(false);
 
   const palette = darkMode ? Colors.dark : Colors.light;
   const lang = language;
@@ -43,6 +44,20 @@ export default function StockListScreen() {
       showToast(language === 'pt' ? 'Erro ao gerar PDF' : 'Failed to generate PDF', '', 'error');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportROI = async () => {
+    if (!company || exportingRoi) return;
+    setExportingRoi(true);
+    try {
+      const uri = await generateStockROIPdf(filtered, generalSales, company, language);
+      const filename = `Stock_ROI_${new Date().toISOString().slice(0, 10)}.pdf`;
+      await sharePdf(uri, filename);
+    } catch {
+      showToast(language === 'pt' ? 'Erro ao gerar relatório ROI' : 'Failed to generate ROI report', '', 'error');
+    } finally {
+      setExportingRoi(false);
     }
   };
 
@@ -73,6 +88,15 @@ export default function StockListScreen() {
             {exporting
               ? <ActivityIndicator size={14} color={palette.textMuted} />
               : <Ionicons name="share-outline" size={17} color={palette.accent} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleExportROI}
+            disabled={exportingRoi}
+            style={[styles.iconBtn, { backgroundColor: '#f0fdf4', borderColor: '#16a34a' }]}
+          >
+            {exportingRoi
+              ? <ActivityIndicator size={14} color="#16a34a" />
+              : <Ionicons name="bar-chart-outline" size={17} color="#16a34a" />}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.newBtn, { backgroundColor: Colors.primary }]}
