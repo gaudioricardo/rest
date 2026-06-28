@@ -834,7 +834,7 @@ badgeColor: 'emerald',
             </p>
             <div className="space-y-3">
               <button
-                onClick={() => window.open('https://wa.me/258840000000?text=' + encodeURIComponent(language === 'en' ? 'Hello, I need support with my Ugest ERP system.' : 'Olá, preciso de suporte com o meu sistema Ugest ERP.'), '_blank')}
+                onClick={() => window.open('https://wa.me/258863503126?text=' + encodeURIComponent(language === 'en' ? 'Hello, I need support with my Ugest ERP system.' : 'Olá, preciso de suporte com o meu sistema Ugest ERP.'), '_blank')}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors cursor-pointer"
               >
                 <MessageCircle size={18} />
@@ -844,13 +844,13 @@ badgeColor: 'emerald',
                 </div>
               </button>
               <button
-                onClick={() => window.open('mailto:support@ugest.co.mz')}
+                onClick={() => window.open('mailto:gaudioricardomatimbe@gmail.com')}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold rounded-xl transition-colors cursor-pointer"
               >
                 <Mail size={16} className="text-slate-400 shrink-0" />
                 <div className="text-left">
                   <p className="text-sm font-semibold leading-tight">Email Support</p>
-                  <p className="text-[10px] text-slate-400 font-normal">wisasulda@gamil.com</p>
+                  <p className="text-[10px] text-slate-400 font-normal">gaudioricardomatimbe@gmail.com</p>
                 </div>
               </button>
             </div>
