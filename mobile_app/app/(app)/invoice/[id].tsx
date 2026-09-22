@@ -12,7 +12,7 @@ import { Badge, getInvoiceVariant } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { DeleteModal } from '../../../components/ui/DeleteModal';
 import { useToast } from '../../../components/ui/ToastContainer';
-import { updateInvoiceStatus, deleteInvoice, createReceipt } from '../../../lib/db';
+import { getReceipts, deleteInvoice, createReceipt } from '../../../lib/db';
 import { generateInvoicePdf, sharePdf } from '../../../lib/pdf';
 
 export default function InvoiceDetailScreen() {
@@ -48,10 +48,11 @@ export default function InvoiceDetailScreen() {
     if (!userId || !company) return;
     setLoading(true);
     try {
-      await updateInvoiceStatus(invoice.id, 'Paid');
+      const payments = await getReceipts(userId);
+      const remaining = invoice.amount - payments.filter(r => r.invoiceId === invoice.id).reduce((sum,r) => sum+r.amount,0);
       await createReceipt(userId, {
         client: invoice.client,
-        amount: invoice.amount,
+        amount: Number(remaining.toFixed(2)),
         method: 'Bank Transfer',
         methodPt: 'Transferência Bancária',
         paymentDate: new Date().toISOString().slice(0, 10),

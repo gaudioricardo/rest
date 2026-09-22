@@ -69,6 +69,7 @@ export default function App() {
   // ─── ERP Data States (start empty – loaded from Supabase) ────────────────
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -209,6 +210,7 @@ export default function App() {
   async function loadUserData(userId: string) {
     if (loadedRef.current === userId) return;
     loadedRef.current = userId;
+    try {
 
     const [invs, qts, rcs, exps, stock, ctcs, dcs, genSales, settingsData] = await Promise.all([
       db.fetchInvoices(userId),
@@ -250,10 +252,16 @@ export default function App() {
       setUserEmail(user.email ?? '');
       setUserName((user.user_metadata?.name as string) ?? '');
     }
+    } catch (error) {
+      loadedRef.current = null;
+      setDataError('Não foi possível carregar os dados completos.');
+      triggerToast('Data unavailable', 'Dados indisponíveis', 'Could not load complete data. Reload to retry.', 'Não foi possível carregar os dados completos. Recarregue para tentar novamente.', 'error');
+    }
   }
 
   function clearUserData() {
     loadedRef.current = null;
+    setDataError(null);
     setInvoices([]);
     setTransactions([]);
     setQuotes([]);
@@ -408,6 +416,24 @@ export default function App() {
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
+  async function refreshAfterSave(action: () => Promise<void>) {
+    try { await action(); }
+    catch { setDataError('Gravação concluída, mas não foi possível actualizar os dados. Recarregue antes de continuar.'); }
+  }
+
+  const pendingWrites = useRef(new Set<string>());
+  function guardedWrite<T extends unknown[]>(key: string, action: (...args: T) => Promise<void>) {
+    return async (...args: T) => {
+      const event = args[0] as { preventDefault?: () => void } | undefined;
+      event?.preventDefault?.();
+      if (pendingWrites.current.has(key)) return;
+      pendingWrites.current.add(key);
+      try { await action(...args); }
+      catch (error) { triggerToast('Error', 'Erro', 'Operation failed. Refresh before retrying.', 'A operação falhou. Actualize antes de tentar novamente.', 'error'); }
+      finally { pendingWrites.current.delete(key); }
+    };
+  }
+
   // Line item helpers
   const addInvoiceItem = () => {
     setFormInvoiceItems(prev => [...prev, { description: '', quantity: 1, unitPrice: 0 }]);
@@ -432,7 +458,7 @@ export default function App() {
   const calcInvoiceSubtotal = () => formInvoiceItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
   const calcQuoteSubtotal = () => formQuoteItems.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
 
-  const handleCreateInvoice = async (e: React.FormEvent) => {
+  const handleCreateInvoice = guardedWrite('handleCreateInvoice', async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formInvoiceClient.trim()) {
       triggerToast('Validation Error', 'Erro de Validação', 'Please supply all parameters.', 'Por favor forneça todos os parâmetros.', 'error');
@@ -458,43 +484,17 @@ export default function App() {
       logoBg: 'bg-emerald-50 text-emerald-800 border border-emerald-500',
       companyProfileId: formInvoiceCompanyProfile,
       notes: formInvoiceNotes.trim() || undefined,
-    });
+    }, formInvoiceItems.filter(it => it.description.trim()));
 
     if (newInv) {
-      const validItems = formInvoiceItems.filter(it => it.description.trim());
-      if (validItems.length > 0) {
-        await db.createInvoiceItems(newInv.id, validItems);
-      }
-
-      // Auto-register client in the clients list
-      const upserted = await db.upsertDebtClientFromDocument(currentUserId, {
-        fullName: formInvoiceClient.trim(),
-        phone: formInvoiceClientPhone.trim() || undefined,
-        email: formInvoiceClientEmail.trim() || undefined,
-      });
-      if (upserted) {
-        setDebtClients(prev => {
-          const exists = prev.find(c => c.id === upserted.id);
-          return exists ? prev.map(c => c.id === upserted.id ? upserted : c) : [upserted, ...prev];
-        });
-      }
-
+      await refreshAfterSave(async () => { setDebtClients(await db.fetchDebtClients(currentUserId)); });
       setInvoices(prev => [newInv, ...prev]);
       setTransactions(prev => [invoicesToTransactions([newInv])[0], ...prev]);
-
-      // Cotações pendentes do cliente passam automaticamente para "Aprovado"
-      const clientLower = formInvoiceClient.trim().toLowerCase();
-      const pendingQuoteIds = quotes
-        .filter(q => q.client.toLowerCase() === clientLower && q.status === 'Pending')
-        .map(q => q.id);
-      if (pendingQuoteIds.length > 0) {
-        await Promise.all(pendingQuoteIds.map(id => db.updateQuoteStatus(id, 'Approved')));
-        setQuotes(prev => prev.map(q =>
-          pendingQuoteIds.includes(q.id)
-            ? { ...q, status: 'Approved' as const, statusPt: 'Aprovado' as const }
-            : q
-        ));
+      if (newInv.status === 'Paid') {
+        await refreshAfterSave(async () => { setStockItems(await db.fetchStockItems(currentUserId)); });
       }
+
+      await refreshAfterSave(async () => { setQuotes(await db.fetchQuotes(currentUserId)); });
 
       setActiveModal(null);
       setFormInvoiceClient('');
@@ -517,77 +517,36 @@ export default function App() {
     } else {
       triggerToast('Error', 'Erro', 'Failed to create invoice.', 'Falha ao criar factura.', 'error');
     }
-  };
+  });
 
-  const handleMarkAsPaid = async (invoiceId: string, paymentMethod: string) => {
+  async function refreshPaymentData() {
+    if (!currentUserId) return;
+    const [invs, rcs, stock, qts, clients] = await Promise.all([
+      db.fetchInvoices(currentUserId), db.fetchReceipts(currentUserId), db.fetchStockItems(currentUserId),
+      db.fetchQuotes(currentUserId), db.fetchDebtClients(currentUserId),
+    ]);
+    setInvoices(invs); setTransactions(invoicesToTransactions(invs)); setReceipts(rcs);
+    setStockItems(stock); setQuotes(qts); setDebtClients(clients);
+  }
+
+  const handleMarkAsPaid = guardedWrite('handleMarkAsPaid', async (invoiceId: string, paymentMethod: string) => {
     if (!currentUserId) return;
     const inv = invoices.find(i => i.id === invoiceId);
-    if (!inv) return;
-
-    const methodPtMap: Record<string, string> = {
-      'Bank Transfer': 'Transferência Bancária',
-      'M-Pesa': 'M-Pesa',
-      'Cash': 'Dinheiro',
-      'E-Mola': 'E-Mola',
-    };
-
-    const ok = await db.updateInvoiceStatus(invoiceId, 'Paid');
-    if (!ok) {
-      triggerToast('Error', 'Erro', 'Failed to update invoice.', 'Falha ao actualizar factura.', 'error');
+    if (!inv || inv.status === 'Paid') return;
+    const allReceipts = await db.fetchReceipts(currentUserId);
+    const remaining = inv.amount - allReceipts.filter(r => r.invoiceId === inv.id).reduce((sum,r) => sum+r.amount,0);
+    const result = await db.createReceipt({
+      userId: currentUserId, invoiceId: inv.id, invoiceRef: inv.invoiceNumber, client: inv.client,
+      amount: Number(remaining.toFixed(2)), method: paymentMethod, methodPt: paymentMethod === 'Bank Transfer' ? 'Transferência Bancária' : paymentMethod,
+      paymentDate: new Date().toISOString().slice(0,10), companyProfileId: inv.companyProfileId,
+    });
+    if (!result) {
+      triggerToast('Error', 'Erro', 'Payment was not saved. Refresh and retry.', 'Pagamento não gravado. Actualize e tente novamente.', 'error');
       return;
     }
-
-    await db.decrementStockForInvoice(currentUserId, invoiceId);
-    const updatedStock = await db.fetchStockItems(currentUserId);
-    setStockItems(updatedStock);
-
-    const today = new Date().toISOString().slice(0, 10);
-    const newReceipt = await db.createReceipt({
-      userId: currentUserId,
-      invoiceId: inv.id,
-      invoiceRef: inv.invoiceNumber,
-      client: inv.client,
-      amount: inv.amount,
-      method: paymentMethod,
-      methodPt: methodPtMap[paymentMethod] ?? paymentMethod,
-      paymentDate: today,
-      companyProfileId: inv.companyProfileId,
-    });
-
-    setInvoices(prev => prev.map(i => i.id === invoiceId
-      ? { ...i, status: 'Paid', statusPt: 'Pago' }
-      : i
-    ));
-    setTransactions(prev => prev.map(t => t.id === invoiceId + '-tx'
-      ? { ...t, status: 'Paid', statusPt: 'Pago' }
-      : t
-    ));
-    if (newReceipt) {
-      setReceipts(prev => [newReceipt, ...prev]);
-    }
-
-    // Settle associated quotes and client automatically
-    const settledQuoteIds = await db.settleQuotesByClientName(currentUserId, inv.client);
-    if (settledQuoteIds.length > 0) {
-      setQuotes(prev => prev.map(q =>
-        settledQuoteIds.includes(q.id)
-          ? { ...q, status: 'Liquidado' as const, statusPt: 'Liquidado' as const }
-          : q
-      ));
-    }
-    const settledClient = await db.settleDebtClientByName(currentUserId, inv.client);
-    if (settledClient) {
-      setDebtClients(prev => prev.map(c => c.id === settledClient.id ? settledClient : c));
-    }
-
-    triggerToast(
-      'Invoice Settled',
-      'Factura Liquidada',
-      `Invoice ${inv.invoiceNumber} marked as paid. Receipt generated.`,
-      `Factura ${inv.invoiceNumber} marcada como paga. Recibo gerado.`,
-      'success'
-    );
-  };
+    await refreshAfterSave(refreshPaymentData);
+    triggerToast('Invoice settled', 'Factura liquidada', 'Receipt and stock saved.', 'Recibo e stock gravados.', 'success');
+  });
 
   const handleApproveQuote = async (quoteId: string, quoteNum: string) => {
     const ok = await db.updateQuoteStatus(quoteId, 'Approved');
@@ -671,7 +630,7 @@ export default function App() {
     }
   };
 
-  const handleCreateQuote = async (e: React.FormEvent) => {
+  const handleCreateQuote = guardedWrite('handleCreateQuote', async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formQuoteClient.trim()) {
       triggerToast('Validation Error', 'Erro', 'Supply parameters.', 'Por favor forneça os parâmetros.', 'error');
@@ -695,27 +654,10 @@ export default function App() {
       logoBg: 'bg-amber-100 text-amber-800',
       companyProfileId: formQuoteCompanyProfile,
       notes: formQuoteNotes.trim() || undefined,
-    });
+    }, formQuoteItems.filter(it => it.description.trim()));
 
     if (newQt) {
-      const validItems = formQuoteItems.filter(it => it.description.trim());
-      if (validItems.length > 0) {
-        await db.createQuoteItems(newQt.id, validItems);
-      }
-
-      // Auto-register client in the clients list
-      const upserted = await db.upsertDebtClientFromDocument(currentUserId, {
-        fullName: formQuoteClient.trim(),
-        phone: formQuoteClientPhone.trim() || undefined,
-        email: formQuoteClientEmail.trim() || undefined,
-      });
-      if (upserted) {
-        setDebtClients(prev => {
-          const exists = prev.find(c => c.id === upserted.id);
-          return exists ? prev.map(c => c.id === upserted.id ? upserted : c) : [upserted, ...prev];
-        });
-      }
-
+      await refreshAfterSave(async () => { setDebtClients(await db.fetchDebtClients(currentUserId)); });
       setQuotes(prev => [newQt, ...prev]);
       setActiveModal(null);
       setFormQuoteClient('');
@@ -737,7 +679,7 @@ export default function App() {
     } else {
       triggerToast('Error', 'Erro', 'Failed to create quote.', 'Falha ao criar proposta.', 'error');
     }
-  };
+  });
 
   const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -909,7 +851,7 @@ export default function App() {
   const [formSaleNotes, setFormSaleNotes] = useState('');
   const [formSaleDate, setFormSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const handleCreateSale = async (e: React.FormEvent) => {
+  const handleCreateSale = guardedWrite('handleCreateSale', async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formSaleProductName.trim() || !formSaleUnitPrice.trim()) {
       triggerToast('Erro', 'Erro', 'Preencha produto e preço.', 'Preencha produto e preço.', 'error');
@@ -935,8 +877,7 @@ export default function App() {
     if (newSale) {
       setGeneralSales(prev => [newSale, ...prev]);
       if (formSaleProductId) {
-        const updatedStock = await db.fetchStockItems(currentUserId);
-        setStockItems(updatedStock);
+        await refreshAfterSave(async () => { setStockItems(await db.fetchStockItems(currentUserId)); });
       }
       setActiveModal(null);
       setFormSaleProductId('');
@@ -948,8 +889,10 @@ export default function App() {
       setFormSaleNotes('');
       setFormSaleDate(new Date().toISOString().slice(0, 10));
       triggerToast('Venda Registada', 'Venda Registada', 'Venda registada com sucesso.', 'Venda registada com sucesso.', 'success');
+    } else {
+      triggerToast('Sale failed', 'Venda não gravada', 'Check available stock and retry.', 'Verifique o stock disponível e tente novamente.', 'error');
     }
-  };
+  });
 
   const handleDeleteSale = async (id: string) => {
     const ok = await db.deleteGeneralSale(id);
@@ -959,7 +902,7 @@ export default function App() {
     }
   };
 
-  const handleCreateReceiptManual = async (e: React.FormEvent) => {
+  const handleCreateReceiptManual = guardedWrite('handleCreateReceiptManual', async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formReceiptClient.trim() || !formReceiptAmount.trim()) {
       triggerToast('Validation Error', 'Erro de Validação', 'Fill required fields.', 'Preencha os campos obrigatórios.', 'error');
@@ -989,41 +932,7 @@ export default function App() {
     });
 
     if (newReceipt) {
-      setReceipts(prev => [newReceipt, ...prev]);
-
-      // Factura referenciada passa automaticamente para "Pago"
-      const invoiceRef = formReceiptInvoiceRef.trim();
-      if (invoiceRef && invoiceRef !== '—') {
-        const linkedInv = invoices.find(i => i.invoiceNumber === invoiceRef && i.status !== 'Paid');
-        if (linkedInv) {
-          const okPay = await db.updateInvoiceStatus(linkedInv.id, 'Paid');
-          if (okPay) {
-            await db.decrementStockForInvoice(currentUserId, linkedInv.id);
-            const updatedStock = await db.fetchStockItems(currentUserId);
-            setStockItems(updatedStock);
-            setInvoices(prev => prev.map(i =>
-              i.id === linkedInv.id ? { ...i, status: 'Paid' as const, statusPt: 'Pago' as const } : i
-            ));
-            setTransactions(prev => prev.map(t =>
-              t.id === linkedInv.id + '-tx' ? { ...t, status: 'Paid' as const, statusPt: 'Pago' as const } : t
-            ));
-          }
-        }
-      }
-
-      // Cascade: cotações e cliente passam para "Liquidado"
-      const settledIds = await db.settleQuotesByClientName(currentUserId, formReceiptClient.trim());
-      if (settledIds.length > 0) {
-        setQuotes(prev => prev.map(q =>
-          settledIds.includes(q.id)
-            ? { ...q, status: 'Liquidado' as const, statusPt: 'Liquidado' as const }
-            : q
-        ));
-      }
-      const settledClient = await db.settleDebtClientByName(currentUserId, formReceiptClient.trim());
-      if (settledClient) {
-        setDebtClients(prev => prev.map(c => c.id === settledClient.id ? settledClient : c));
-      }
+      await refreshAfterSave(refreshPaymentData);
 
       setActiveModal(null);
       setFormReceiptClient('');
@@ -1034,16 +943,16 @@ export default function App() {
       setFormReceiptCompanyProfile('primary');
       setFormReceiptNotes('');
       triggerToast(
-        'Receipt Issued — Invoice Settled',
-        'Recibo Emitido — Factura Liquidada',
-        `Receipt ${newReceipt.receiptNumber} issued. Linked invoice marked as paid.`,
-        `Recibo ${newReceipt.receiptNumber} emitido. Factura vinculada marcada como paga.`,
+        'Receipt Issued',
+        'Recibo Emitido',
+        `Receipt ${newReceipt.receiptNumber} issued. Payment recorded.`,
+        `Recibo ${newReceipt.receiptNumber} emitido. Pagamento registado.`,
         'success'
       );
     } else {
       triggerToast('Error', 'Erro', 'Failed to create receipt.', 'Falha ao criar recibo.', 'error');
     }
-  };
+  });
 
   // PDF Report generation
   const handleTriggerReportGeneration = () => {
@@ -1115,6 +1024,13 @@ export default function App() {
   }
 
   // ─── Main App ──────────────────────────────────────────────────────────────
+  if (dataError) return <div role="alert" className="min-h-screen flex flex-col items-center justify-center gap-4 p-8">
+    <p>{dataError}</p>
+    <button className="bg-primary text-white px-4 py-2 rounded" onClick={() => window.location.reload()}>
+      {language === 'pt' ? 'Recarregar dados' : 'Reload data'}
+    </button>
+  </div>;
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 font-sans antialiased text-slate-800 dark:text-slate-100 transition-colors">
       <div className="flex flex-col min-h-screen">

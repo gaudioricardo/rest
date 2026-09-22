@@ -1,3 +1,5 @@
+import { mutate } from '../../shared/mutations';
+import { readRows, type ReadOptions } from '../../shared/readRows';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -199,18 +201,9 @@ export function mapContact(row: Record<string, unknown>): Contact {
 
 // ─── Invoice CRUD ────────────────────────────────────────────────────────────
 
-export async function fetchInvoices(userId: string): Promise<Invoice[]> {
-  try {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('user_id', userId)
-      .order('seq_number', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapInvoice);
-  } catch {
-    return [];
-  }
+export async function fetchInvoices(userId: string, options: ReadOptions = {}): Promise<Invoice[]> {
+  const rows = await readRows(supabase, 'invoices', userId, '*', ["seq_number"], options);
+  return rows.map(mapInvoice);
 }
 
 export async function createInvoice(payload: {
@@ -227,11 +220,8 @@ export async function createInvoice(payload: {
   logoBg?: string;
   companyProfileId?: 'primary' | 'secondary';
   notes?: string;
-}): Promise<Invoice | null> {
-  try {
-    const { data, error } = await supabase
-      .from('invoices')
-      .insert({
+}, items: DocumentItem[] = []): Promise<Invoice | null> {
+  const { data, error } = await mutate(supabase, 'rest_save_document', { p_kind: 'invoice', p_document: {
         user_id: payload.userId,
         client: payload.client,
         client_nuit: payload.clientNuit ?? null,
@@ -245,14 +235,9 @@ export async function createInvoice(payload: {
         logo_bg: payload.logoBg ?? 'bg-emerald-50 text-emerald-800 border border-emerald-500',
         company_profile_id: payload.companyProfileId ?? 'primary',
         notes: payload.notes ?? null,
-      })
-      .select()
-      .single();
-    if (error || !data) return null;
-    return mapInvoice(data);
-  } catch {
-    return null;
-  }
+      }, p_items: items });
+  if (error || !data) return null;
+  return mapInvoice(data);
 }
 
 export async function updateInvoiceStatus(id: string, status: Invoice['status']): Promise<boolean> {
@@ -278,18 +263,9 @@ export async function deleteInvoice(id: string): Promise<boolean> {
 
 // ─── Quote CRUD ──────────────────────────────────────────────────────────────
 
-export async function fetchQuotes(userId: string): Promise<Quote[]> {
-  try {
-    const { data, error } = await supabase
-      .from('quotes')
-      .select('*')
-      .eq('user_id', userId)
-      .order('seq_number', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapQuote);
-  } catch {
-    return [];
-  }
+export async function fetchQuotes(userId: string, options: ReadOptions = {}): Promise<Quote[]> {
+  const rows = await readRows(supabase, 'quotes', userId, '*', ["seq_number"], options);
+  return rows.map(mapQuote);
 }
 
 export async function createQuote(payload: {
@@ -305,11 +281,8 @@ export async function createQuote(payload: {
   logoBg?: string;
   companyProfileId?: 'primary' | 'secondary';
   notes?: string;
-}): Promise<Quote | null> {
-  try {
-    const { data, error } = await supabase
-      .from('quotes')
-      .insert({
+}, items: DocumentItem[] = []): Promise<Quote | null> {
+  const { data, error } = await mutate(supabase, 'rest_save_document', { p_kind: 'quote', p_document: {
         user_id: payload.userId,
         client: payload.client,
         client_nuit: payload.clientNuit ?? null,
@@ -323,14 +296,9 @@ export async function createQuote(payload: {
         logo_bg: payload.logoBg ?? 'bg-amber-100 text-amber-800',
         company_profile_id: payload.companyProfileId ?? 'primary',
         notes: payload.notes ?? null,
-      })
-      .select()
-      .single();
-    if (error || !data) return null;
-    return mapQuote(data);
-  } catch {
-    return null;
-  }
+      }, p_items: items });
+  if (error || !data) return null;
+  return mapQuote(data);
 }
 
 export async function updateQuoteStatus(id: string, status: Quote['status']): Promise<boolean> {
@@ -356,18 +324,9 @@ export async function deleteQuote(id: string): Promise<boolean> {
 
 // ─── Receipt CRUD ────────────────────────────────────────────────────────────
 
-export async function fetchReceipts(userId: string): Promise<Receipt[]> {
-  try {
-    const { data, error } = await supabase
-      .from('receipts')
-      .select('*')
-      .eq('user_id', userId)
-      .order('seq_number', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapReceipt);
-  } catch {
-    return [];
-  }
+export async function fetchReceipts(userId: string, options: ReadOptions = {}): Promise<Receipt[]> {
+  const rows = await readRows(supabase, 'receipts', userId, '*', ["seq_number"], options);
+  return rows.map(mapReceipt);
 }
 
 export async function createReceipt(payload: {
@@ -382,10 +341,7 @@ export async function createReceipt(payload: {
   companyProfileId?: 'primary' | 'secondary';
   notes?: string;
 }): Promise<Receipt | null> {
-  try {
-    const { data, error } = await supabase
-      .from('receipts')
-      .insert({
+    const { data, error } = await mutate(supabase, 'rest_create_receipt', { p_receipt: {
         user_id: payload.userId,
         invoice_id: payload.invoiceId ?? null,
         invoice_ref: payload.invoiceRef,
@@ -396,15 +352,10 @@ export async function createReceipt(payload: {
         payment_date: payload.paymentDate,
         company_profile_id: payload.companyProfileId ?? 'primary',
         notes: payload.notes ?? null,
-      })
-      .select()
-      .single();
+      } });
     if (error || !data) return null;
     return mapReceipt(data);
-  } catch {
-    return null;
   }
-}
 
 export async function deleteReceipt(id: string): Promise<boolean> {
   try {
@@ -417,18 +368,9 @@ export async function deleteReceipt(id: string): Promise<boolean> {
 
 // ─── Expense CRUD ────────────────────────────────────────────────────────────
 
-export async function fetchExpenses(userId: string): Promise<Expense[]> {
-  try {
-    const { data, error } = await supabase
-      .from('expenses')
-      .select('*')
-      .eq('user_id', userId)
-      .order('seq_number', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapExpense);
-  } catch {
-    return [];
-  }
+export async function fetchExpenses(userId: string, options: ReadOptions = {}): Promise<Expense[]> {
+  const rows = await readRows(supabase, 'expenses', userId, '*', ["seq_number"], options);
+  return rows.map(mapExpense);
 }
 
 export async function createExpense(payload: {
@@ -484,18 +426,9 @@ export async function deleteExpense(id: string): Promise<boolean> {
 
 // ─── StockItem CRUD ──────────────────────────────────────────────────────────
 
-export async function fetchStockItems(userId: string): Promise<StockItem[]> {
-  try {
-    const { data, error } = await supabase
-      .from('stock_items')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapStockItem);
-  } catch {
-    return [];
-  }
+export async function fetchStockItems(userId: string, options: ReadOptions = {}): Promise<StockItem[]> {
+  const rows = await readRows(supabase, 'stock_items', userId, '*', ["created_at"], options);
+  return rows.map(mapStockItem);
 }
 
 export async function createStockItem(payload: {
@@ -585,19 +518,9 @@ export function mapGeneralSale(row: Record<string, unknown>): GeneralSale {
   };
 }
 
-export async function fetchGeneralSales(userId: string): Promise<GeneralSale[]> {
-  try {
-    const { data, error } = await supabase
-      .from('general_sales')
-      .select('*')
-      .eq('user_id', userId)
-      .order('sale_date', { ascending: false })
-      .order('seq_number', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapGeneralSale);
-  } catch {
-    return [];
-  }
+export async function fetchGeneralSales(userId: string, options: ReadOptions = {}): Promise<GeneralSale[]> {
+  const rows = await readRows(supabase, 'general_sales', userId, '*', ["sale_date","seq_number"], options);
+  return rows.map(mapGeneralSale);
 }
 
 export async function createGeneralSale(payload: {
@@ -611,45 +534,21 @@ export async function createGeneralSale(payload: {
   paymentMethod: import('../types').PaymentMethod;
   notes?: string;
 }): Promise<GeneralSale | null> {
-  try {
-    const totalAmount = payload.quantity * payload.unitPrice;
-    const { data, error } = await supabase
-      .from('general_sales')
-      .insert({
+    const { data, error } = await mutate(supabase, 'rest_create_sale', { p_sale: {
         user_id: payload.userId,
         product_id: payload.productId ?? null,
         product_name: payload.productName,
         sku: payload.sku,
         quantity: payload.quantity,
         unit_price: payload.unitPrice,
-        total_amount: totalAmount,
+
         sale_date: payload.saleDate,
         payment_method: payload.paymentMethod,
         notes: payload.notes ?? null,
-      })
-      .select()
-      .single();
+      } });
     if (error || !data) return null;
-
-    if (payload.productId) {
-      const { data: stock } = await supabase
-        .from('stock_items')
-        .select('stock_level')
-        .eq('id', payload.productId)
-        .single();
-      if (stock) {
-        await supabase
-          .from('stock_items')
-          .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - payload.quantity) })
-          .eq('id', payload.productId);
-      }
-    }
-
     return mapGeneralSale(data);
-  } catch {
-    return null;
   }
-}
 
 export async function deleteGeneralSale(id: string): Promise<boolean> {
   try {
@@ -661,46 +560,15 @@ export async function deleteGeneralSale(id: string): Promise<boolean> {
 }
 
 export async function decrementStockForInvoice(userId: string, invoiceId: string): Promise<void> {
-  try {
-    const { data: items } = await supabase
-      .from('invoice_items')
-      .select('description, quantity')
-      .eq('invoice_id', invoiceId);
-    if (!items || items.length === 0) return;
-    for (const item of items) {
-      if (!item.description || !(item.quantity > 0)) continue;
-      const { data: stock } = await supabase
-        .from('stock_items')
-        .select('id, stock_level')
-        .eq('user_id', userId)
-        .ilike('name', item.description)
-        .maybeSingle();
-      if (stock) {
-        await supabase
-          .from('stock_items')
-          .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - item.quantity) })
-          .eq('id', stock.id);
-      }
-    }
-  } catch {
-    // silently skip if stock decrement fails — receipt is already created
+    const { error } = await supabase.rpc('rest_apply_invoice_stock', { p_invoice_id: invoiceId });
+    if (error) throw error;
   }
-}
 
 // ─── Contact CRUD ────────────────────────────────────────────────────────────
 
-export async function fetchContacts(userId: string): Promise<Contact[]> {
-  try {
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapContact);
-  } catch {
-    return [];
-  }
+export async function fetchContacts(userId: string, options: ReadOptions = {}): Promise<Contact[]> {
+  const rows = await readRows(supabase, 'contacts', userId, '*', ["created_at"], options);
+  return rows.map(mapContact);
 }
 
 export async function createContact(payload: {
@@ -837,18 +705,9 @@ export function mapDebtClient(row: Record<string, unknown>): DebtClient {
   };
 }
 
-export async function fetchDebtClients(userId: string): Promise<DebtClient[]> {
-  try {
-    const { data, error } = await supabase
-      .from('debt_clients')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    if (error || !data) return [];
-    return data.map(mapDebtClient);
-  } catch {
-    return [];
-  }
+export async function fetchDebtClients(userId: string, options: ReadOptions = {}): Promise<DebtClient[]> {
+  const rows = await readRows(supabase, 'debt_clients', userId, '*', ["created_at"], options);
+  return rows.map(mapDebtClient);
 }
 
 export async function createDebtClient(payload: {

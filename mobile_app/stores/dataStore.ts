@@ -12,6 +12,10 @@ interface DataState {
   debtClients: DebtClient[];
   generalSales: GeneralSale[];
   loading: boolean;
+  ready: boolean;
+  error: string | null;
+  ownerId: string | null;
+  reset: () => void;
 
   loadAll: (userId: string) => Promise<void>;
   loadInvoices: (userId: string) => Promise<void>;
@@ -24,7 +28,7 @@ interface DataState {
   loadGeneralSales: (userId: string) => Promise<void>;
 }
 
-export const useDataStore = create<DataState>((set) => ({
+export const useDataStore = create<DataState>((set, get) => ({
   invoices: [],
   quotes: [],
   receipts: [],
@@ -34,9 +38,13 @@ export const useDataStore = create<DataState>((set) => ({
   debtClients: [],
   generalSales: [],
   loading: false,
+  ready: false,
+  error: null,
+  ownerId: null,
+  reset: () => set({ invoices: [], quotes: [], receipts: [], stockItems: [], expenses: [], contacts: [], debtClients: [], generalSales: [], ready: false, error: null, ownerId: null }),
 
   loadAll: async (userId) => {
-    set({ loading: true });
+    set({ loading: true, error: null, ownerId: userId });
     try {
       const [invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, generalSales] =
         await Promise.all([
@@ -49,42 +57,74 @@ export const useDataStore = create<DataState>((set) => ({
           db.getDebtClients(userId),
           db.getGeneralSales(userId),
         ]);
-      set({ invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, generalSales, loading: false });
+      if (get().ownerId === userId) set({ invoices, quotes, receipts, stockItems, expenses, contacts, debtClients, generalSales, loading: false, ready: true });
     } catch {
-      set({ loading: false });
+      if (get().ownerId === userId) set({ loading: false, error: 'Não foi possível carregar os dados completos. Tente novamente.' });
     }
   },
 
   loadInvoices: async (userId) => {
+    try {
     const invoices = await db.getInvoices(userId);
-    set({ invoices });
+    if (get().ownerId === userId) set({ invoices });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
   loadQuotes: async (userId) => {
+    try {
     const quotes = await db.getQuotes(userId);
-    set({ quotes });
+    if (get().ownerId === userId) set({ quotes });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
   loadReceipts: async (userId) => {
+    try {
     const receipts = await db.getReceipts(userId);
-    set({ receipts });
+    if (get().ownerId === userId) set({ receipts });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
   loadStock: async (userId) => {
+    try {
     const stockItems = await db.getStockItems(userId);
-    set({ stockItems });
+    if (get().ownerId === userId) set({ stockItems });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
   loadExpenses: async (userId) => {
+    try {
     const expenses = await db.getExpenses(userId);
-    set({ expenses });
+    if (get().ownerId === userId) set({ expenses });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
   loadContacts: async (userId) => {
+    try {
     const contacts = await db.getContacts(userId);
-    set({ contacts });
+    if (get().ownerId === userId) set({ contacts });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
   loadClients: async (userId) => {
+    try {
     const debtClients = await db.getDebtClients(userId);
-    set({ debtClients });
+    if (get().ownerId === userId) set({ debtClients });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
   loadGeneralSales: async (userId) => {
+    try {
     const generalSales = await db.getGeneralSales(userId);
-    set({ generalSales });
+    if (get().ownerId === userId) set({ generalSales });
+    } catch {
+      if (get().ownerId === userId) set({ error: 'Dados desactualizados. Recarregue para continuar.' });
+    }
   },
 }));

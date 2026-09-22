@@ -1,3 +1,5 @@
+import { mutate } from '../../shared/mutations';
+import { readRows, type ReadOptions } from '../../shared/readRows';
 import { supabase } from './supabase';
 import type {
   StockItem, Invoice, Quote, Receipt, Expense,
@@ -93,23 +95,18 @@ const mapInvoice = (row: any): Invoice => ({
   notes: row.notes,
 });
 
-export const getInvoices = async (userId: string): Promise<Invoice[]> => {
-  const { data } = await supabase
-    .from('invoices')
-    .select('*, invoice_items(*)')
-    .eq('user_id', userId)
-    .order('seq_number', { ascending: false });
-  return (data ?? []).map(mapInvoice);
+export const getInvoices = async (userId: string, options: ReadOptions = {}): Promise<Invoice[]> => {
+  const rows = await readRows(supabase, 'invoices', userId, '*, invoice_items(*)', ["seq_number"], options);
+  return rows.map(mapInvoice);
 };
 
 export const createInvoice = async (
   userId: string,
   inv: Omit<Invoice, 'id' | 'seqNumber' | 'invoiceNumber' | 'initials' | 'date' | 'datePt' | 'logoBg' | 'statusPt'>,
-  items: DocumentItem[]
+  items: DocumentItem[],
+  sourceQuoteId?: string
 ) => {
-  const { data: invData, error } = await supabase
-    .from('invoices')
-    .insert({
+  const { data, error } = await mutate(supabase, 'rest_save_document', { p_kind: 'invoice', p_document: {
       user_id: userId,
       client: inv.client,
       client_nuit: inv.clientNuit,
@@ -123,25 +120,10 @@ export const createInvoice = async (
       logo_bg: getAvatarColor(inv.client),
       company_profile_id: inv.companyProfileId ?? 'primary',
       notes: inv.notes,
-    })
-    .select()
-    .single();
-  if (error || !invData) throw error;
-
-  if (items.length > 0) {
-    await supabase.from('invoice_items').insert(
-      items.map((item, i) => ({
-        invoice_id: invData.id,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        sort_order: i,
-      }))
-    );
-  }
-
-  await upsertDebtClient(userId, inv.client, inv.clientPhone ?? '', inv.clientEmail ?? '');
-  return invData;
+      source_quote_id: sourceQuoteId,
+    }, p_items: items });
+  if (error) throw error;
+  return data;
 };
 
 export const updateInvoiceStatus = async (id: string, status: Invoice['status']) => {
@@ -153,7 +135,7 @@ export const updateInvoice = async (
   inv: Pick<Invoice, 'client' | 'clientNuit' | 'clientPhone' | 'clientEmail' | 'issueDate' | 'dueDate' | 'amount' | 'notes' | 'companyProfileId'>,
   items: DocumentItem[]
 ) => {
-  const { error } = await supabase.from('invoices').update({
+  const { error } = await mutate(supabase, 'rest_save_document', { p_kind: 'invoice', p_id: id, p_document: {
     client: inv.client,
     client_nuit: inv.clientNuit ?? null,
     client_phone: inv.clientPhone ?? null,
@@ -163,20 +145,8 @@ export const updateInvoice = async (
     amount: inv.amount,
     company_profile_id: inv.companyProfileId ?? 'primary',
     notes: inv.notes ?? null,
-  }).eq('id', id);
+  }, p_items: items });
   if (error) throw error;
-  await supabase.from('invoice_items').delete().eq('invoice_id', id);
-  if (items.length > 0) {
-    await supabase.from('invoice_items').insert(
-      items.map((item, i) => ({
-        invoice_id: id,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        sort_order: i,
-      }))
-    );
-  }
 };
 
 export const deleteInvoice = async (id: string) => {
@@ -215,13 +185,9 @@ const mapQuote = (row: any): Quote => ({
   notes: row.notes,
 });
 
-export const getQuotes = async (userId: string): Promise<Quote[]> => {
-  const { data } = await supabase
-    .from('quotes')
-    .select('*, quote_items(*)')
-    .eq('user_id', userId)
-    .order('seq_number', { ascending: false });
-  return (data ?? []).map(mapQuote);
+export const getQuotes = async (userId: string, options: ReadOptions = {}): Promise<Quote[]> => {
+  const rows = await readRows(supabase, 'quotes', userId, '*, quote_items(*)', ["seq_number"], options);
+  return rows.map(mapQuote);
 };
 
 export const createQuote = async (
@@ -229,9 +195,7 @@ export const createQuote = async (
   qt: Omit<Quote, 'id' | 'seqNumber' | 'quoteNumber' | 'initials' | 'date' | 'datePt' | 'logoBg' | 'statusPt'>,
   items: DocumentItem[]
 ) => {
-  const { data: qtData, error } = await supabase
-    .from('quotes')
-    .insert({
+  const { data, error } = await mutate(supabase, 'rest_save_document', { p_kind: 'quote', p_document: {
       user_id: userId,
       client: qt.client,
       client_nuit: qt.clientNuit,
@@ -245,25 +209,9 @@ export const createQuote = async (
       logo_bg: getAvatarColor(qt.client),
       company_profile_id: qt.companyProfileId ?? 'primary',
       notes: qt.notes,
-    })
-    .select()
-    .single();
-  if (error || !qtData) throw error;
-
-  if (items.length > 0) {
-    await supabase.from('quote_items').insert(
-      items.map((item, i) => ({
-        quote_id: qtData.id,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        sort_order: i,
-      }))
-    );
-  }
-
-  await upsertDebtClient(userId, qt.client, qt.clientPhone ?? '', qt.clientEmail ?? '');
-  return qtData;
+    }, p_items: items });
+  if (error) throw error;
+  return data;
 };
 
 export const updateQuoteStatus = async (id: string, status: Quote['status']) => {
@@ -275,7 +223,7 @@ export const updateQuote = async (
   qt: Pick<Quote, 'client' | 'clientNuit' | 'clientPhone' | 'clientEmail' | 'issueDate' | 'validityDays' | 'amount' | 'notes' | 'companyProfileId'>,
   items: DocumentItem[]
 ) => {
-  const { error } = await supabase.from('quotes').update({
+  const { error } = await mutate(supabase, 'rest_save_document', { p_kind: 'quote', p_id: id, p_document: {
     client: qt.client,
     client_nuit: qt.clientNuit ?? null,
     client_phone: qt.clientPhone ?? null,
@@ -285,20 +233,8 @@ export const updateQuote = async (
     amount: qt.amount,
     company_profile_id: qt.companyProfileId ?? 'primary',
     notes: qt.notes ?? null,
-  }).eq('id', id);
+  }, p_items: items });
   if (error) throw error;
-  await supabase.from('quote_items').delete().eq('quote_id', id);
-  if (items.length > 0) {
-    await supabase.from('quote_items').insert(
-      items.map((item, i) => ({
-        quote_id: id,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        sort_order: i,
-      }))
-    );
-  }
 };
 
 export const deleteQuote = async (id: string) => {
@@ -325,22 +261,16 @@ const mapReceipt = (row: any): Receipt => ({
   notes: row.notes,
 });
 
-export const getReceipts = async (userId: string): Promise<Receipt[]> => {
-  const { data } = await supabase
-    .from('receipts')
-    .select('*')
-    .eq('user_id', userId)
-    .order('seq_number', { ascending: false });
-  return (data ?? []).map(mapReceipt);
+export const getReceipts = async (userId: string, options: ReadOptions = {}): Promise<Receipt[]> => {
+  const rows = await readRows(supabase, 'receipts', userId, '*', ["seq_number"], options);
+  return rows.map(mapReceipt);
 };
 
 export const createReceipt = async (
   userId: string,
   rec: Pick<Receipt, 'client' | 'amount' | 'method' | 'methodPt' | 'paymentDate' | 'invoiceRef' | 'invoiceId' | 'companyProfileId' | 'notes'>
 ) => {
-  const { data, error } = await supabase
-    .from('receipts')
-    .insert({
+    const { data, error } = await mutate(supabase, 'rest_create_receipt', { p_receipt: {
       user_id: userId,
       invoice_id: rec.invoiceId,
       invoice_ref: rec.invoiceRef,
@@ -351,50 +281,19 @@ export const createReceipt = async (
       payment_date: rec.paymentDate,
       company_profile_id: rec.companyProfileId ?? 'primary',
       notes: rec.notes,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-
-  if (rec.invoiceId) {
-    await updateInvoiceStatus(rec.invoiceId, 'Paid');
-    await decrementStockForInvoice(userId, rec.invoiceId);
-    // cascade: settle client
-    await supabase
-      .from('debt_clients')
-      .update({ status: 'Liquidado' })
-      .eq('user_id', userId)
-      .ilike('full_name', rec.client);
-  }
-  return data;
-};
+    } });
+    if (error) throw error;
+    return data;
+  };
 
 export const deleteReceipt = async (id: string) => {
   return supabase.from('receipts').delete().eq('id', id);
 };
 
 export const decrementStockForInvoice = async (userId: string, invoiceId: string): Promise<void> => {
-  const { data: items } = await supabase
-    .from('invoice_items')
-    .select('description, quantity')
-    .eq('invoice_id', invoiceId);
-  if (!items || items.length === 0) return;
-  for (const item of items) {
-    if (!item.description || !(item.quantity > 0)) continue;
-    const { data: stock } = await supabase
-      .from('stock_items')
-      .select('id, stock_level')
-      .eq('user_id', userId)
-      .ilike('name', item.description)
-      .maybeSingle();
-    if (stock) {
-      await supabase
-        .from('stock_items')
-        .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - item.quantity) })
-        .eq('id', stock.id);
-    }
-  }
-};
+    const { error } = await supabase.rpc('rest_apply_invoice_stock', { p_invoice_id: invoiceId });
+    if (error) throw error;
+  };
 
 // ─── STOCK ───────────────────────────────────────────────────────────────────
 
@@ -417,13 +316,9 @@ const mapStock = (row: any): StockItem => {
   };
 };
 
-export const getStockItems = async (userId: string): Promise<StockItem[]> => {
-  const { data } = await supabase
-    .from('stock_items')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  return (data ?? []).map(mapStock);
+export const getStockItems = async (userId: string, options: ReadOptions = {}): Promise<StockItem[]> => {
+  const rows = await readRows(supabase, 'stock_items', userId, '*', ["created_at"], options);
+  return rows.map(mapStock);
 };
 
 export const createStockItem = async (userId: string, item: Omit<StockItem, 'id' | 'status' | 'statusPt'>) => {
@@ -481,13 +376,9 @@ const mapExpense = (row: any): Expense => ({
   receiptImageUrl: row.receipt_image_url ?? undefined,
 });
 
-export const getExpenses = async (userId: string): Promise<Expense[]> => {
-  const { data } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('user_id', userId)
-    .order('seq_number', { ascending: false });
-  return (data ?? []).map(mapExpense);
+export const getExpenses = async (userId: string, options: ReadOptions = {}): Promise<Expense[]> => {
+  const rows = await readRows(supabase, 'expenses', userId, '*', ["seq_number"], options);
+  return rows.map(mapExpense);
 };
 
 export const createExpense = async (userId: string, exp: {
@@ -530,13 +421,9 @@ const mapContact = (row: any): Contact => ({
   avatarColor: row.avatar_color ?? getAvatarColor(row.name ?? ''),
 });
 
-export const getContacts = async (userId: string): Promise<Contact[]> => {
-  const { data } = await supabase
-    .from('contacts')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  return (data ?? []).map(mapContact);
+export const getContacts = async (userId: string, options: ReadOptions = {}): Promise<Contact[]> => {
+  const rows = await readRows(supabase, 'contacts', userId, '*', ["created_at"], options);
+  return rows.map(mapContact);
 };
 
 export const createContact = async (userId: string, c: Omit<Contact, 'id'>) => {
@@ -570,13 +457,9 @@ const mapDebtClient = (row: any): DebtClient => ({
   createdAt: row.created_at,
 });
 
-export const getDebtClients = async (userId: string): Promise<DebtClient[]> => {
-  const { data } = await supabase
-    .from('debt_clients')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  return (data ?? []).map(mapDebtClient);
+export const getDebtClients = async (userId: string, options: ReadOptions = {}): Promise<DebtClient[]> => {
+  const rows = await readRows(supabase, 'debt_clients', userId, '*', ["created_at"], options);
+  return rows.map(mapDebtClient);
 };
 
 export const upsertDebtClient = async (
@@ -648,14 +531,9 @@ const mapGeneralSale = (row: any): GeneralSale => {
   };
 };
 
-export const getGeneralSales = async (userId: string): Promise<GeneralSale[]> => {
-  const { data } = await supabase
-    .from('general_sales')
-    .select('*')
-    .eq('user_id', userId)
-    .order('sale_date', { ascending: false })
-    .order('seq_number', { ascending: false });
-  return (data ?? []).map(mapGeneralSale);
+export const getGeneralSales = async (userId: string, options: ReadOptions = {}): Promise<GeneralSale[]> => {
+  const rows = await readRows(supabase, 'general_sales', userId, '*', ["sale_date","seq_number"], options);
+  return rows.map(mapGeneralSale);
 };
 
 export const createGeneralSale = async (payload: {
@@ -669,41 +547,21 @@ export const createGeneralSale = async (payload: {
   paymentMethod: import('../shared/types').PaymentMethod;
   notes?: string;
 }): Promise<GeneralSale | null> => {
-  const totalAmount = payload.quantity * payload.unitPrice;
-  const { data, error } = await supabase
-    .from('general_sales')
-    .insert({
+    const { data, error } = await mutate(supabase, 'rest_create_sale', { p_sale: {
       user_id: payload.userId,
       product_id: payload.productId ?? null,
       product_name: payload.productName,
       sku: payload.sku,
       quantity: payload.quantity,
       unit_price: payload.unitPrice,
-      total_amount: totalAmount,
+
       sale_date: payload.saleDate,
       payment_method: payload.paymentMethod,
       notes: payload.notes ?? null,
-    })
-    .select()
-    .single();
-  if (error || !data) return null;
-
-  if (payload.productId) {
-    const { data: stock } = await supabase
-      .from('stock_items')
-      .select('stock_level')
-      .eq('id', payload.productId)
-      .single();
-    if (stock) {
-      await supabase
-        .from('stock_items')
-        .update({ stock_level: Math.max(0, (stock.stock_level ?? 0) - payload.quantity) })
-        .eq('id', payload.productId);
-    }
-  }
-
-  return mapGeneralSale(data);
-};
+    } });
+    if (error || !data) throw error;
+    return mapGeneralSale(data);
+  };
 
 export const deleteGeneralSale = async (id: string): Promise<boolean> => {
   const { error } = await supabase.from('general_sales').delete().eq('id', id);

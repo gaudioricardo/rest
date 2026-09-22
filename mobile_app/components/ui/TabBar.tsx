@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TabActions } from '@react-navigation/native';
-import type { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
+import { TabActions, type NavigationHelpers, type ParamListBase, type TabNavigationState } from 'expo-router/react-navigation';
+import type { MaterialTopTabNavigationOptions, MaterialTopTabNavigationEventMap } from 'expo-router/js-top-tabs';
 import { Colors } from '../../shared/theme';
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -62,7 +62,11 @@ function TabItem({
 }
 
 // Main floating bar
-export function FloatingTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps) {
+export function FloatingTabBar({ state, descriptors, navigation }: {
+  state: TabNavigationState<ParamListBase>;
+  descriptors: Record<string, { options: MaterialTopTabNavigationOptions }>;
+  navigation: NavigationHelpers<ParamListBase, MaterialTopTabNavigationEventMap>;
+}) {
   const { darkMode } = useSettingsStore();
   const palette = darkMode ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();

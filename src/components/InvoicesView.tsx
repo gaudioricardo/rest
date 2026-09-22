@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText, Plus, Check, AlertCircle, Clock, FileCheck2,
   Download, Filter, Eye, ChevronLeft, ChevronRight, Trash2, Info, X,
@@ -42,6 +42,10 @@ export default function InvoicesView({
   const [rightMode, setRightMode] = useState<'new' | 'details'>('new');
   const [mobileModalOpen, setMobileModalOpen] = useState(false);
 
+  useEffect(() => {
+    setSelectedInvoice(current => current ? invoices.find(inv => inv.id === current.id) ?? null : null);
+  }, [invoices]);
+
   const handleDeleteInvoice = async () => {
     if (!deleteTarget) return;
     await db.deleteInvoice(deleteTarget.id);
@@ -66,7 +70,7 @@ export default function InvoicesView({
   const handleMarkAsPaid = (id: string, invNum: string) => {
     if (onMarkAsPaid) {
       onMarkAsPaid(id, 'Bank Transfer');
-      if (selectedInvoice?.id === id) setSelectedInvoice({ ...selectedInvoice!, status: 'Paid', statusPt: 'Pago' });
+
       return;
     }
     setInvoices(invoices.map(inv => inv.id === id ? { ...inv, status: 'Paid' as const, statusPt: 'Pago' as const } : inv));

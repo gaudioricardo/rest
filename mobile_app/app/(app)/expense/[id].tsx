@@ -201,7 +201,7 @@ function Row({
 }: {
   label: string;
   value: string;
-  palette: typeof Colors.light;
+  palette: typeof Colors.light | typeof Colors.dark;
   mono?: boolean;
   valueColor?: string;
 }) {

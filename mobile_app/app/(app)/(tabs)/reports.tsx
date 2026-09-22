@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useDataStore } from '../../../stores/dataStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { Colors, Spacing, FontSize, Radius } from '../../../shared/theme';

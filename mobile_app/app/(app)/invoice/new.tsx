@@ -15,7 +15,7 @@ import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { DocumentItemRow } from '../../../components/forms/DocumentItemRow';
 import { useToast } from '../../../components/ui/ToastContainer';
-import { createInvoice, updateQuoteStatus } from '../../../lib/db';
+import { createInvoice } from '../../../lib/db';
 import type { DocumentItem } from '../../../shared/types';
 
 const TAX_RATE = 0.03;
@@ -109,14 +109,12 @@ export default function NewInvoiceScreen() {
           companyProfileId: useSecondary ? 'secondary' : 'primary',
           notes: notes || undefined,
         },
-        items.filter((i) => i.description.trim())
+        items.filter((i) => i.description.trim()),
+        selectedQuoteId || undefined
       );
       await loadInvoices(userId);
       await loadClients(userId);
-      if (selectedQuoteId) {
-        await updateQuoteStatus(selectedQuoteId, 'Liquidado');
-        await loadQuotes(userId);
-      }
+      await loadQuotes(userId);
       showToast(
         lang === 'pt' ? 'Factura criada' : 'Invoice created',
         undefined,

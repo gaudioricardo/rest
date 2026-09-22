@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { View, Text, Button, ActivityIndicator } from 'react-native';
 import { Stack } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
@@ -7,14 +8,21 @@ import { useSettingsStore } from '../../stores/settingsStore';
 export default function AppLayout() {
   const userId = useAuthStore((s) => s.userId);
   const loadAll = useDataStore((s) => s.loadAll);
+  const { ready, error, reset } = useDataStore();
   const loadSettings = useSettingsStore((s) => s.loadSettings);
 
   useEffect(() => {
+    reset();
     if (userId) {
       loadAll(userId);
       loadSettings(userId);
     }
   }, [userId]);
+
+  if (error) return <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 16 }}>
+    <Text>{error}</Text><Button title="Tentar novamente" onPress={() => { if (userId) loadAll(userId); }} />
+  </View>;
+  if (!ready) return <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator /></View>;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

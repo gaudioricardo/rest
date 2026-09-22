@@ -1,5 +1,10 @@
 import React from 'react';
-import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import {
+  createMaterialTopTabNavigator,
+  type MaterialTopTabNavigationOptions,
+  type MaterialTopTabNavigationEventMap,
+} from 'expo-router/js-top-tabs';
+import type { ParamListBase, TabNavigationState } from 'expo-router/react-navigation';
 import { withLayoutContext } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../../shared/theme';
@@ -8,7 +13,12 @@ import { tr } from '../../../shared/i18n';
 import { FloatingTabBar } from '../../../components/ui/TabBar';
 
 const { Navigator } = createMaterialTopTabNavigator();
-const MaterialTabs = withLayoutContext(Navigator);
+const MaterialTabs = withLayoutContext<
+  MaterialTopTabNavigationOptions,
+  typeof Navigator,
+  TabNavigationState<ParamListBase>,
+  MaterialTopTabNavigationEventMap
+>(Navigator);
 
 export default function TabsLayout() {
   const { language } = useSettingsStore();
@@ -17,7 +27,7 @@ export default function TabsLayout() {
     <MaterialTabs
       id={undefined}
       tabBarPosition="bottom"
-      tabBar={(props) => <FloatingTabBar {...props} />}
+      tabBar={(props: React.ComponentProps<typeof FloatingTabBar>) => <FloatingTabBar {...props} />}
       style={{ backgroundColor: 'transparent' }}
       sceneContainerStyle={{ backgroundColor: 'transparent' }}
       screenOptions={{
